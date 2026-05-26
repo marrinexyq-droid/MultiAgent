@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI Image to React"
+  short_description: "Turn UI screenshots into React pages"
+  default_prompt: "Use $ui-image-to-react to turn this webpage screenshot into a React page."

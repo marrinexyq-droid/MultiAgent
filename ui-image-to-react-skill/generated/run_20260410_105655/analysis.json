@@ -1,0 +1,18 @@
+{
+  "summary": "Local fallback analysis based on image dimensions and supplied notes.",
+  "sections": [],
+  "style_tokens": {
+    "screenshot_width": 1920,
+    "screenshot_height": 911,
+    "average_rgb": [
+      250,
+      250,
+      250
+    ],
+    "long_page": false
+  },
+  "interaction_hints": [],
+  "unknowns": [
+    "Detailed OCR and component extraction require an external multimodal backend."
+  ]
+}
