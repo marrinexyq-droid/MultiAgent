@@ -484,8 +484,8 @@ async function createAndRunHexBattle() {
     cancelled = true;
     loading.value = false;
     status.value = "error";
-    error.value = "创建超时，请检查后端是否运行";
-  }, 15000);
+    error.value = "创建或启动超时。LLM 模式首次初始化可能较慢，请检查后端是否运行，或稍后重试。";
+  }, 45000);
   try {
     await ensureRoles();
     if (cancelled) return;

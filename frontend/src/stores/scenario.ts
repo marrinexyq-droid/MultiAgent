@@ -13,6 +13,7 @@ export const useScenarioStore = defineStore("scenario", {
     defaultTeamConfig: (state) => state.rolesResponse?.default_team_config ?? null,
     defaultMaxTurns: (state) => state.rolesResponse?.default_max_turns ?? 40,
     defaultScenarioConfig: (state) => state.rolesResponse?.default_scenario_config ?? null,
+    defaultHexScenarioConfig: (state) => state.rolesResponse?.default_hex_scenario_config ?? null,
   },
   actions: {
     async ensureLoaded() {

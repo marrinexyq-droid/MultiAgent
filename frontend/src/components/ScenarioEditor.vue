@@ -4,6 +4,7 @@
       <div>
         <div class="eyebrow">Scenario Sandbox</div>
         <h2>场景沙盘</h2>
+        <p class="scenario-grid-note">{{ gridTypeLabel }} · {{ terrainPresetLabel }}</p>
       </div>
       <div class="scenario-legend">
         <span class="legend-pill red">红方出生区</span>
@@ -121,6 +122,16 @@ const zoneFields = ["x", "y", "width", "height"] as const;
 const handles: Handle[] = ["n", "e", "s", "w", "nw", "ne", "sw", "se"];
 
 const scenario = computed(() => deploymentStore.scenarioConfig!);
+const gridTypeLabel = computed(() => scenario.value.grid_type === "hex" ? "Hex 战术网格" : "Square 方格网格");
+const terrainPresetLabel = computed(() => {
+  const labels: Record<string, string> = {
+    plains: "开阔平原",
+    mixed: "混合地形",
+    jungle: "丛林地带",
+    urban: "城市战区",
+  };
+  return labels[scenario.value.terrain_preset ?? ""] ?? scenario.value.terrain_preset ?? "默认地形";
+});
 const selectedZone = computed(() => {
   const selected = deploymentStore.selectedZone;
   if (!selected || !deploymentStore.scenarioConfig) return null;

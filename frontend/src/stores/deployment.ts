@@ -40,8 +40,9 @@ export const useDeploymentStore = defineStore("deployment", {
         this.teamConfig = JSON.parse(JSON.stringify(scenario.defaultTeamConfig));
         this.maxTurns = scenario.defaultMaxTurns;
       }
-      if (!this.scenarioConfig && scenario.defaultScenarioConfig) {
-        this.scenarioConfig = JSON.parse(JSON.stringify(scenario.defaultScenarioConfig));
+      const defaultScenario = scenario.defaultHexScenarioConfig ?? scenario.defaultScenarioConfig;
+      if (!this.scenarioConfig && defaultScenario) {
+        this.scenarioConfig = JSON.parse(JSON.stringify(defaultScenario));
       }
       this.ensureSelectedZone();
     },

@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { createBattle, fetchBattleFrames, fetchBattleSummary, openBattleStream, startBattle } from "../api";
+import { createBattle, fetchBattleFrames, fetchBattleSummary, openBattleStream, pauseBattle, resumeBattle, startBattle } from "../api";
 import type { BattleFrame } from "../types";
 import { useDeploymentStore } from "./deployment";
 
@@ -13,6 +13,7 @@ export const useBattleStore = defineStore("battle", {
     summary: null as unknown,
     source: null as EventSource | null,
     loading: false,
+    liveControlLoading: false,
     error: "" as string,
     focusedAgentId: "" as string,
     hoveredAgentId: "" as string,
@@ -58,6 +59,7 @@ export const useBattleStore = defineStore("battle", {
         this.focusedAgentId = "";
         this.hoveredAgentId = "";
         this.isPlaying = false;
+        this.liveControlLoading = false;
       } catch (error) {
         this.error = error instanceof Error ? error.message : "创建演练失败";
         throw error;
@@ -94,6 +96,34 @@ export const useBattleStore = defineStore("battle", {
           this.isPlaying = false;
         },
       });
+    },
+    async pauseRealtime() {
+      if (!this.battleId) throw new Error("missing battle id");
+      this.liveControlLoading = true;
+      this.error = "";
+      try {
+        const result = await pauseBattle(this.battleId);
+        this.status = result.status;
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : "暂停推演失败";
+        throw error;
+      } finally {
+        this.liveControlLoading = false;
+      }
+    },
+    async resumeRealtime() {
+      if (!this.battleId) throw new Error("missing battle id");
+      this.liveControlLoading = true;
+      this.error = "";
+      try {
+        const result = await resumeBattle(this.battleId);
+        this.status = result.status;
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : "继续推演失败";
+        throw error;
+      } finally {
+        this.liveControlLoading = false;
+      }
     },
     async loadReplay() {
       if (!this.battleId) throw new Error("missing battle id");

@@ -2,12 +2,13 @@
   <main class="page battle-page" :class="`${battleViewMode}-mode`">
     <section class="battle-statusbar section-card theatre-hud">
       <div class="battle-status-meta battle-status-overview">
-        <div class="eyebrow">Theatre HUD</div>
-        <strong>Battle {{ battleStore.battleId || "pending" }} · Round {{ roundProgress }}</strong>
+        <div class="eyebrow">Theatre Command</div>
+        <strong>{{ battleStore.battleId || "pending" }} · Round {{ roundProgress }}</strong>
         <div class="battle-status-inline battle-status-summary">
           <span>{{ statusLabel }}</span>
-          <span>{{ battleStore.mode }}</span>
-          <span>Alive {{ aliveUnits }}</span>
+          <span class="hud-team red">RED {{ redAliveUnits }}</span>
+          <span class="hud-team blue">BLUE {{ blueAliveUnits }}</span>
+          <span>Events {{ keyEventCount }}</span>
           <span>Effects {{ activeEffects }}</span>
         </div>
       </div>
@@ -20,7 +21,7 @@
           全屏战场
         </button>
         <button
-          class="ghost-btn compact-btn"
+          class="ghost-btn compact-btn analysis-toggle"
           :class="{ active: battleViewMode === 'analysis' }"
           @click="battleViewMode = 'analysis'"
         >
@@ -42,7 +43,35 @@
     <section v-if="battleViewMode === 'analysis'" class="battle-grid-layout">
       <EventFeed :frame="battleStore.currentFrame" @open-archive="showAllEvents = true" />
 
-      <section class="battle-center-stage solo-stage">
+      <section v-if="isHexFrame" class="battle-center-stage solo-stage battle-hex-stage analysis-hex-stage">
+        <HexBattleMap
+          :frame="battleStore.currentFrame"
+          :focused-agent-id="battleStore.focusedAgentId"
+          selected-team="all"
+          :previous-frame="previousFrame"
+          :show-diffs="showHexDiffs"
+          :show-influence="showHexInfluence"
+          :focused-unit-info="focusedUnitInfo"
+          :timeline-markers="timelineBarData"
+          @focus-agent="handleHexFocus"
+          @jump="seekToMarker"
+        />
+        <BattleReplayControls
+          :current-turn="battleStore.currentTurn"
+          :frames-length="battleStore.frames.length"
+          :is-playing="battleStore.isPlaying"
+          :max-frame-index="maxFrameIndex"
+          :playback-speed="battleStore.playbackSpeed"
+          @start="battleStore.seekToStart()"
+          @backward="battleStore.stepBackward()"
+          @toggle-play="battleStore.togglePlayback()"
+          @forward="battleStore.stepForward()"
+          @latest="battleStore.seekToLatest()"
+          @seek="seekReplayFrame"
+          @speed="battleStore.setPlaybackSpeed"
+        />
+      </section>
+      <section v-else class="battle-center-stage solo-stage">
         <BattleMap v-model:density="theatreDensity" :frame="battleStore.currentFrame" />
       </section>
 
@@ -52,12 +81,40 @@
     </section>
 
     <section v-else class="battle-theatre-layout">
-      <section class="battle-theatre-stage">
+      <section v-if="isHexFrame" class="battle-theatre-stage battle-hex-stage">
+        <HexBattleMap
+          :frame="battleStore.currentFrame"
+          :focused-agent-id="battleStore.focusedAgentId"
+          selected-team="all"
+          :previous-frame="previousFrame"
+          :show-diffs="showHexDiffs"
+          :show-influence="showHexInfluence"
+          :focused-unit-info="focusedUnitInfo"
+          :timeline-markers="timelineBarData"
+          @focus-agent="handleHexFocus"
+          @jump="seekToMarker"
+        />
+        <BattleReplayControls
+          :current-turn="battleStore.currentTurn"
+          :frames-length="battleStore.frames.length"
+          :is-playing="battleStore.isPlaying"
+          :max-frame-index="maxFrameIndex"
+          :playback-speed="battleStore.playbackSpeed"
+          @start="battleStore.seekToStart()"
+          @backward="battleStore.stepBackward()"
+          @toggle-play="battleStore.togglePlayback()"
+          @forward="battleStore.stepForward()"
+          @latest="battleStore.seekToLatest()"
+          @seek="seekReplayFrame"
+          @speed="battleStore.setPlaybackSpeed"
+        />
+      </section>
+      <section v-else class="battle-theatre-stage">
         <BattleMap v-model:density="theatreDensity" :frame="battleStore.currentFrame" />
       </section>
 
-      <div class="theatre-event-ticker" @click="eventDrawerOpen = true">
-        <span>EVENT</span>
+      <div class="theatre-event-ticker" :class="latestEventClass" @click="eventDrawerOpen = true">
+        <span>{{ latestEventLabel }}</span>
         <strong>{{ latestEventText }}</strong>
       </div>
 
@@ -66,6 +123,8 @@
       </div>
 
       <div class="theatre-floating-actions right">
+        <button v-if="isHexFrame" type="button" class="theatre-fab" :class="{ active: showHexInfluence }" @click="showHexInfluence = !showHexInfluence">影响圈</button>
+        <button v-if="isHexFrame" type="button" class="theatre-fab" :class="{ active: showHexDiffs }" @click="showHexDiffs = !showHexDiffs">帧差</button>
         <button type="button" class="theatre-fab" @click="openDecisionPanel('focus')">焦点</button>
         <button type="button" class="theatre-fab" @click="openDecisionPanel('intel')">情报</button>
       </div>
@@ -135,7 +194,9 @@ import { RouterLink } from "vue-router";
 import { useRouter } from "vue-router";
 import BattleOverlayPanel from "../components/BattleOverlayPanel.vue";
 import BattleMap from "../components/BattleMap.vue";
+import BattleReplayControls from "../components/BattleReplayControls.vue";
 import EventFeed from "../components/EventFeed.vue";
+import HexBattleMap from "../components/HexBattleMap.vue";
 import InfoColumn from "../components/InfoColumn.vue";
 import { useBattleStore } from "../stores/battle";
 
@@ -147,6 +208,7 @@ const statusLabel = computed(() => {
     idle: "待命",
     created: "已创建",
     running: "推演中",
+    paused: "已暂停",
     done: "已完成",
     error: "异常",
   };
@@ -160,23 +222,49 @@ const maxTurnsDisplay = computed(() => {
 const roundProgress = computed(() => `${currentTurnDisplay.value}/${maxTurnsDisplay.value}`);
 const recentStructuredEvents = computed(() => (battleStore.currentFrame?.events_structured ?? []).slice(-12).reverse());
 const activeEffects = computed(() => battleStore.currentFrame?.effect_details?.length ?? 0);
-const aliveUnits = computed(() => battleStore.currentFrame?.units.filter((unit) => unit.alive).length ?? 0);
+const redAliveUnits = computed(() => battleStore.currentFrame?.units.filter((unit) => unit.team === "red" && unit.alive).length ?? 0);
+const blueAliveUnits = computed(() => battleStore.currentFrame?.units.filter((unit) => unit.team === "blue" && unit.alive).length ?? 0);
+const keyEventTypes = new Set(["RESULT", "DOWN", "ATTACK", "SPOT", "JAM", "BLOCK"]);
+const keyEventCount = computed(() => (battleStore.currentFrame?.events_structured ?? []).filter((event) => keyEventTypes.has(event.type.toUpperCase())).length);
 const showAllEvents = ref(false);
 const eventDrawerOpen = ref(false);
 const decisionDrawerOpen = ref(false);
 const battleViewMode = ref<"theatre" | "analysis">("theatre");
 const selectedPanel = ref<"focus" | "intel" | "effects" | "advice">("focus");
 const theatreDensity = ref<"fit" | "compact" | "standard" | "expanded">("fit");
+const showHexDiffs = ref(false);
+const showHexInfluence = ref(false);
 let replayTimer: ReturnType<typeof setTimeout> | null = null;
+const maxFrameIndex = computed(() => Math.max(0, battleStore.frames.length - 1));
+const isHexFrame = computed(() => battleStore.currentFrame?.map.grid_type === "hex");
+const previousFrame = computed(() => battleStore.currentTurn > 0 ? battleStore.frames[battleStore.currentTurn - 1] ?? null : null);
+const focusedUnitInfo = computed(() => {
+  const unit = battleStore.focusedUnit;
+  if (!unit) return null;
+  return {
+    vision: unit.vision_range,
+    attack: unit.attack_range,
+    pos: unit.pos,
+  };
+});
+const timelineBarData = computed(() => {
+  const maxTurn = Math.max(1, battleStore.frames.length - 1);
+  return battleStore.timelineMarkers.map((marker) => ({
+    ...marker,
+    pct: (marker.turn / maxTurn) * 100,
+  }));
+});
 const realtimeActionLabel = computed(() => {
   if (battleStore.status === "running") return "暂停推演";
+  if (battleStore.status === "paused") return "继续推演";
   if (battleStore.status === "done") return "查看结算";
   if (battleStore.status === "error") return "重新连接推演";
   return "开始实时推演";
 });
-const realtimeActionDisabled = computed(() => battleStore.status === "running");
+const realtimeActionDisabled = computed(() => !battleStore.battleId || battleStore.liveControlLoading);
 const realtimeActionHint = computed(() => {
-  if (battleStore.status === "running") return "当前前端尚未接入暂停接口，先以状态占位展示。";
+  if (battleStore.status === "running") return "暂停后后端会停止推进新回合，当前画面保持在最新帧。";
+  if (battleStore.status === "paused") return "继续后端实时推演。";
   if (battleStore.status === "done") return "跳转结算查看完整复盘。";
   return "开始实时推演";
 });
@@ -185,6 +273,20 @@ const latestEventText = computed(() => {
   if (event) return event.summary;
   return "等待战术事件写入";
 });
+const latestEventType = computed(() => battleStore.currentFrame?.events_structured?.at(-1)?.type.toUpperCase() ?? "IDLE");
+const latestEventLabel = computed(() => {
+  const labels: Record<string, string> = {
+    RESULT: "RESULT",
+    DOWN: "DOWN",
+    ATTACK: "ATTACK",
+    SPOT: "SPOT",
+    JAM: "JAM",
+    BLOCK: "BLOCK",
+    IDLE: "EVENT",
+  };
+  return labels[latestEventType.value] ?? latestEventType.value;
+});
+const latestEventClass = computed(() => `event-${latestEventType.value.toLowerCase()}`);
 const drawerTitle = computed(() => {
   const titles = {
     focus: "焦点单位",
@@ -242,6 +344,14 @@ async function handleRealtimeAction() {
     await router.push(`/review/${battleStore.battleId}`);
     return;
   }
+  if (battleStore.status === "running") {
+    await battleStore.pauseRealtime();
+    return;
+  }
+  if (battleStore.status === "paused") {
+    await battleStore.resumeRealtime();
+    return;
+  }
   if (!realtimeActionDisabled.value) {
     await startBattleNow();
   }
@@ -269,9 +379,16 @@ function seekToMarker(marker: { turn: number; actor_id?: string | null; target_i
   }
 }
 
-function eventHeadline(event: { type: string; actor_id?: string | null }) {
-  const actor = event.actor_id ? ` ${event.actor_id}` : "";
-  return `[${event.type.toUpperCase()}]${actor}`;
+function handleHexFocus(agentId: string) {
+  battleStore.setFocusedAgent(agentId);
+  if (battleViewMode.value === "theatre") {
+    openDecisionPanel("focus");
+  }
+}
+
+function seekReplayFrame(turn: number) {
+  battleStore.currentTurn = turn;
+  battleStore.pause();
 }
 
 function clearReplayTimer() {

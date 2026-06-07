@@ -4,17 +4,16 @@
       <div class="brand-wrap">
         <RouterLink to="/" class="brand">W.</RouterLink>
         <div class="brand-copy">
-          <span class="brand-kicker">Multi-Agent Theatre</span>
-          <strong>对抗推演平台</strong>
+          <span class="brand-kicker">Agent Evaluation</span>
+          <strong>策略评测与可观测平台</strong>
         </div>
       </div>
       <nav class="nav-links">
-        <RouterLink to="/">大厅</RouterLink>
-        <RouterLink to="/deployment">部署</RouterLink>
-        <RouterLink to="/hex-lab">六边形</RouterLink>
-        <RouterLink to="/fantasy">魔幻</RouterLink>
+        <RouterLink to="/">概览</RouterLink>
+        <RouterLink to="/evaluation">评测</RouterLink>
+        <RouterLink to="/deployment">场景配置</RouterLink>
         <RouterLink v-if="battleStore.battleId" :to="`/battle/${battleStore.battleId}`">战场</RouterLink>
-        <RouterLink v-if="battleStore.battleId" :to="`/review/${battleStore.battleId}`">结算</RouterLink>
+        <RouterLink v-if="battleStore.battleId" :to="`/review/${battleStore.battleId}`">复盘</RouterLink>
       </nav>
     </header>
     <RouterView />

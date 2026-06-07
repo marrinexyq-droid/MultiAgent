@@ -52,7 +52,12 @@
         <div class="meta-card">
           <span>地图尺寸</span>
           <strong>{{ deploymentStore.scenarioConfig.width }} × {{ deploymentStore.scenarioConfig.height }}</strong>
-          <small>{{ zoneSummary("control") }}</small>
+          <small>{{ gridTypeLabel }} / {{ terrainPresetLabel }}</small>
+        </div>
+        <div class="meta-card">
+          <span>控制区</span>
+          <strong>{{ zoneSummary("control") }}</strong>
+          <small>Hex 战术网格用于正式推演</small>
         </div>
         <div class="meta-card">
           <span>出生区</span>
@@ -141,6 +146,18 @@ const strengthDelta = computed(() => {
   const blue = teamUnitCount("blue");
   if (red === blue) return "当前红蓝兵力平衡";
   return red > blue ? `红队兵力领先 ${red - blue}` : `蓝队兵力领先 ${blue - red}`;
+});
+const gridTypeLabel = computed(() => deploymentStore.scenarioConfig?.grid_type === "hex" ? "Hex 六边形网格" : "Square 方格网格");
+const terrainPresetLabel = computed(() => {
+  const preset = deploymentStore.scenarioConfig?.terrain_preset;
+  if (!preset) return "默认地形";
+  const labels: Record<string, string> = {
+    plains: "开阔平原",
+    mixed: "混合地形",
+    jungle: "丛林地带",
+    urban: "城市战区",
+  };
+  return labels[preset] ?? preset;
 });
 
 function zoneSummary(team: "red" | "blue" | "control") {

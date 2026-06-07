@@ -17,15 +17,6 @@
           </div>
         </div>
 
-        <div class="focus-metric-grid compact">
-          <div class="mini-metric"><span>HP</span><strong>{{ focusedUnit.hp }}/{{ focusedUnit.max_hp }}</strong></div>
-          <div class="mini-metric"><span>资源</span><strong>{{ focusedUnit.ammo }}/{{ focusedUnit.max_ammo }}</strong></div>
-          <div class="mini-metric"><span>移动力</span><strong>{{ focusedUnit.movement_points || focusedUnit.move_speed }}</strong></div>
-          <div class="mini-metric"><span>射程</span><strong>{{ focusAttackRange }}</strong></div>
-          <div class="mini-metric"><span>技能</span><strong>{{ focusedUnit.skill_name }}</strong></div>
-          <div class="mini-metric"><span>冷却</span><strong>{{ focusedUnit.skill_cooldown_remaining }}</strong></div>
-        </div>
-
         <div class="focus-panel-tabs">
           <button type="button" class="focus-panel-tab-btn" :class="{ active: activeFocusTab === 'actions' }" @click="activeFocusTab = 'actions'">动作</button>
           <button type="button" class="focus-panel-tab-btn" :class="{ active: activeFocusTab === 'risk' }" @click="activeFocusTab = 'risk'">风险</button>
@@ -52,10 +43,26 @@
             <p>{{ recommendedJudgement }}</p>
           </div>
         </div>
+
+        <div class="focus-metric-grid compact auxiliary-metrics">
+          <div class="mini-metric"><span>HP</span><strong>{{ focusedUnit.hp }}/{{ focusedUnit.max_hp }}</strong></div>
+          <div class="mini-metric"><span>资源</span><strong>{{ focusedUnit.ammo }}/{{ focusedUnit.max_ammo }}</strong></div>
+          <div class="mini-metric"><span>移动力</span><strong>{{ focusedUnit.movement_points || focusedUnit.move_speed }}</strong></div>
+          <div class="mini-metric"><span>射程</span><strong>{{ focusAttackRange }}</strong></div>
+          <div class="mini-metric"><span>技能</span><strong>{{ focusedUnit.skill_name }}</strong></div>
+          <div class="mini-metric"><span>冷却</span><strong>{{ focusedUnit.skill_cooldown_remaining }}</strong></div>
+        </div>
       </div>
 
       <div v-else class="empty-state compact">点击主舞台中的单位后，这里会切换为决策面板并给出动作、风险和推荐判断。</div>
     </section>
+
+    <LlmDecisionTracePanel
+      v-if="frame"
+      :frame="frame"
+      :focused-agent-id="focusedUnit?.agent_id"
+      :limit="focusedUnit ? 1 : 4"
+    />
 
     <section class="section-card right-panel-card" v-if="frame">
       <div class="section-head compact-head">
@@ -135,6 +142,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import LlmDecisionTracePanel from "./LlmDecisionTracePanel.vue";
 import { useBattleStore } from "../stores/battle";
 import type { BattleFrame, TeamKey } from "../types";
 

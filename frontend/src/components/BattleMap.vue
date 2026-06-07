@@ -125,28 +125,31 @@
                   <template v-if="cellAt(x - 1, y - 1)">
                     <div class="cell-card-bar" :class="`team-${cellAt(x - 1, y - 1)!.team}`"></div>
                     <div v-if="lockedTargets.has(cellAt(x - 1, y - 1)!.agent_id)" class="cell-alert-dot"></div>
-                    <div class="cell-status-row">
+                    <div v-if="isExpandedCell(cellAt(x - 1, y - 1)!.agent_id)" class="cell-status-row">
                       <span class="cell-state-chip" :class="unitStateTone(cellAt(x - 1, y - 1)!.agent_id)">{{ unitStateLabel(cellAt(x - 1, y - 1)!.agent_id) }}</span>
                     </div>
-                    <div v-if="statusBadges(cellAt(x - 1, y - 1)!.agent_id).length" class="cell-badges">
+                    <div v-if="isExpandedCell(cellAt(x - 1, y - 1)!.agent_id) && statusBadges(cellAt(x - 1, y - 1)!.agent_id).length" class="cell-badges">
                       <span v-for="badge in statusBadges(cellAt(x - 1, y - 1)!.agent_id).slice(0, 2)" :key="`${cellAt(x - 1, y - 1)!.agent_id}-${badge}`" class="cell-badge" :class="badge">
                         {{ badgeShortLabel(badge) }}
                       </span>
+                    </div>
+                    <div class="cell-hp-rail" :class="hpTone(cellAt(x - 1, y - 1)!.agent_id)">
+                      <span :style="{ width: `${unitHpPercent(cellAt(x - 1, y - 1)!.agent_id)}%` }"></span>
                     </div>
                     <div class="tactical-unit-core">
                       <span class="cell-role">{{ roleCode(cellAt(x - 1, y - 1)!.role) }}</span>
                       <span class="cell-id">{{ teamShort(cellAt(x - 1, y - 1)!.team) }}{{ cellIndex(cellAt(x - 1, y - 1)!.agent_id) }}</span>
                     </div>
-                    <div class="tactical-attr-row">
+                    <div v-if="isExpandedCell(cellAt(x - 1, y - 1)!.agent_id)" class="tactical-attr-row">
                       <span>MP {{ unitMove(cellAt(x - 1, y - 1)!.agent_id) }}</span>
                       <span>RG {{ unitRange(cellAt(x - 1, y - 1)!.agent_id) }}</span>
                     </div>
-                    <div class="tactical-resource-row">
+                    <div v-if="isExpandedCell(cellAt(x - 1, y - 1)!.agent_id)" class="tactical-resource-row">
                       <span>HP {{ unitHpPercent(cellAt(x - 1, y - 1)!.agent_id) }}%</span>
                       <span>AM {{ unitAmmo(cellAt(x - 1, y - 1)!.agent_id) }}</span>
                     </div>
 
-                    <div v-if="battleStore.hoveredAgentId === cellAt(x - 1, y - 1)!.agent_id" class="cell-popover">
+                    <div v-if="isExpandedCell(cellAt(x - 1, y - 1)!.agent_id)" class="cell-popover">
                       <strong>{{ cellAt(x - 1, y - 1)!.agent_id }}</strong>
                       <span>{{ unitMeta(cellAt(x - 1, y - 1)!.agent_id) }}</span>
                     </div>
@@ -333,6 +336,7 @@ function cellClass(cell: BattleFrame["map"]["cells"][number][number], x: number,
     [`team-${cell.team}`]: true,
     focused: battleStore.focusedAgentId === cell.agent_id,
     hovered: battleStore.hoveredAgentId === cell.agent_id,
+    expanded: isExpandedCell(cell.agent_id),
     active: activeAgentId.value === cell.agent_id,
     locked: lockedTargets.value.has(cell.agent_id),
     exposed: unitState(cell.agent_id)?.exposed_turns_remaining,
@@ -493,8 +497,19 @@ function unitRange(agentId: string) {
 
 function unitHpPercent(agentId: string) {
   const unit = unitState(agentId);
-  if (!unit || !unit.max_hp) return "-";
+  if (!unit || !unit.max_hp) return 0;
   return Math.max(0, Math.round((unit.hp / unit.max_hp) * 100));
+}
+
+function hpTone(agentId: string) {
+  const pct = unitHpPercent(agentId);
+  if (pct <= 35) return "critical";
+  if (pct <= 65) return "warning";
+  return "stable";
+}
+
+function isExpandedCell(agentId: string) {
+  return battleStore.focusedAgentId === agentId || battleStore.hoveredAgentId === agentId || activeAgentId.value === agentId;
 }
 
 function unitAmmo(agentId: string) {

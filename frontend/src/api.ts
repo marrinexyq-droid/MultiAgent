@@ -1,4 +1,4 @@
-import type { BattleFrame, RolesResponse, ScenarioConfig, TeamConfigPayload } from "./types";
+import type { BattleFrame, EvaluationReport, RolesResponse, ScenarioConfig, TeamConfigPayload } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
@@ -30,6 +30,22 @@ export async function startBattle(battleId: string, mode: string): Promise<void>
     body: JSON.stringify({ mode }),
   });
   if (!response.ok) throw new Error("failed to start battle");
+}
+
+export async function pauseBattle(battleId: string): Promise<{ status: string }> {
+  const response = await fetch(`${API_BASE}/api/battles/${battleId}/pause`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("failed to pause battle");
+  return response.json();
+}
+
+export async function resumeBattle(battleId: string): Promise<{ status: string }> {
+  const response = await fetch(`${API_BASE}/api/battles/${battleId}/resume`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("failed to resume battle");
+  return response.json();
 }
 
 export function openBattleStream(
@@ -67,5 +83,11 @@ export async function fetchBattleFrames(battleId: string): Promise<{ frames: Bat
 export async function fetchBattleSummary(battleId: string): Promise<unknown> {
   const response = await fetch(`${API_BASE}/api/battles/${battleId}/summary`);
   if (!response.ok) throw new Error("failed to load summary");
+  return response.json();
+}
+
+export async function fetchLatestEvaluation(): Promise<EvaluationReport> {
+  const response = await fetch(`${API_BASE}/api/evaluations/latest`);
+  if (!response.ok) throw new Error("failed to load latest evaluation");
   return response.json();
 }

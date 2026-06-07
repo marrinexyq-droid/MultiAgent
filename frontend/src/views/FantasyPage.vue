@@ -259,13 +259,15 @@ function onCellClick(cell: any) {
 }
 .fantasy-topbar {
   max-width: 1560px; margin: 0 auto 18px; display: flex; justify-content: space-between; align-items: flex-end; gap: 18px;
+  min-width: 0;
 }
 .fantasy-eye { font-size: 10px; font-weight: 700; color: #c8a878; letter-spacing: 0.3em; font-family: 'Space Mono', monospace; }
 .fantasy-topbar h1 { margin: 4px 0 6px; font-size: clamp(32px, 4vw, 56px); color: #e8d8b8; letter-spacing: -0.06em; font-weight: 900; }
-.fantasy-topbar p { margin: 0; color: rgba(200,168,120,0.5); font-size: 13px; }
-.fantasy-actions { display: flex; gap: 10px; align-items: center; }
+.fantasy-topbar p { margin: 0; color: rgba(200,168,120,0.5); font-size: 13px; max-width: 68ch; }
+.fantasy-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .fantasy-actions-vertical { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
 .fantasy-btn {
+  display: inline-flex; align-items: center; justify-content: center;
   border-radius: 999px; padding: 10px 18px; font-size: 12px; font-weight: 700; cursor: pointer; border: none;
   font-family: 'Space Mono', monospace; transition: all 150ms ease; text-align: center;
 }
@@ -276,7 +278,7 @@ function onCellClick(cell: any) {
 
 .fantasy-console {
   max-width: 1560px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
-  gap: 18px; height: calc(100vh - 200px); min-height: 0;
+  gap: 18px; height: clamp(560px, calc(100vh - 200px), 920px); min-height: 0;
 }
 .fantasy-main { min-height: 0; display: grid; }
 .fantasy-side { display: grid; gap: 12px; align-content: start; overflow-y: auto; max-height: 100%; padding-right: 4px; }
@@ -295,7 +297,7 @@ function onCellClick(cell: any) {
 .fantasy-unit-detail strong { color: #e8d8b8; }
 
 .fantasy-battle-log { margin-top: 8px; display: grid; gap: 2px; }
-.fantasy-log-line { font-size: 10px; color: rgba(200,168,120,0.5); font-family: 'Space Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 6px; border-left: 2px solid transparent; margin-bottom: 2px; }
+.fantasy-log-line { font-size: 10px; color: rgba(200,168,120,0.5); font-family: 'Space Mono', monospace; overflow-wrap: anywhere; padding-left: 6px; border-left: 2px solid transparent; margin-bottom: 2px; }
 .log-attack { color: #ef4444; border-left-color: rgba(239,68,68,0.3); }
 .log-heal { color: #4ade80; border-left-color: rgba(74,222,128,0.3); }
 .log-result { color: #fbbf24; font-weight: 800; border-left-color: rgba(251,191,36,0.3); }
@@ -331,4 +333,59 @@ function onCellClick(cell: any) {
 .speed-btns { display: flex; gap: 3px; }
 .speed-btns button { padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(200,168,120,0.1); background: transparent; color: rgba(200,168,120,0.4); font-size: 10px; font-family: 'Space Mono', monospace; cursor: pointer; transition: all 120ms; }
 .speed-btns button.active { background: rgba(200,168,120,0.15); color: #c8a878; border-color: rgba(200,168,120,0.2); }
+
+@media (max-width: 1100px) {
+  .fantasy-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .fantasy-actions {
+    justify-content: flex-start;
+  }
+  .fantasy-console {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .fantasy-main {
+    min-height: min(62vh, 620px);
+  }
+  .fantasy-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+    max-height: none;
+    padding-right: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .fantasy-page {
+    min-height: 100vh;
+    padding: 14px;
+  }
+  .fantasy-eye {
+    letter-spacing: 0.18em;
+  }
+  .fantasy-topbar h1 {
+    font-size: clamp(30px, 11vw, 42px);
+    line-height: 1;
+  }
+  .fantasy-actions,
+  .fantasy-btn,
+  .fantasy-actions-vertical {
+    width: 100%;
+  }
+  .fantasy-console {
+    gap: 14px;
+  }
+  .fantasy-main {
+    min-height: 420px;
+  }
+  .fantasy-side {
+    grid-template-columns: 1fr;
+  }
+  .fantasy-stats,
+  .fantasy-speed-control {
+    flex-wrap: wrap;
+  }
+}
 </style>

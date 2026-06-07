@@ -104,6 +104,23 @@ export interface BattleFrame {
   mode: string;
   phase: string;
   status: string;
+  llm_mode_enabled?: boolean;
+  llm_decision_traces?: Array<{
+    turn: number;
+    agent_id: string;
+    team: TeamKey;
+    role: RoleKey;
+    ok: boolean;
+    fallback_reason?: string | null;
+    latency_ms?: number | null;
+    prompt_tokens?: number | null;
+    completion_tokens?: number | null;
+    total_tokens?: number | null;
+    decision_action_type?: string;
+    raw_completion?: string | null;
+    llm_error?: string | null;
+    json_mode_requested?: boolean;
+  }>;
   events: string[];
   events_structured: Array<{
     turn: number;
@@ -253,4 +270,51 @@ export interface BattleFrame {
     rendered_text: string;
     turn: number;
   }>;
+}
+
+export interface EvaluationMetrics {
+  runs: number;
+  red_win_rate: number;
+  blue_win_rate: number;
+  draw_rate: number;
+  avg_turns: number;
+  avg_red_score: number;
+  avg_blue_score: number;
+  avg_red_damage: number;
+  avg_blue_damage: number;
+  avg_scout_reports_used: number;
+  avg_task_completion_rate: number;
+  avg_invalid_action_rate: number;
+}
+
+export interface EvaluationPolicySummary {
+  overall: EvaluationMetrics;
+  by_scenario: Record<string, EvaluationMetrics>;
+}
+
+export interface EvaluationRun {
+  policy: string;
+  scenario: string;
+  seed: number;
+  winner: TeamKey | null;
+  reason: string | null;
+  turns: number;
+  red_score: number;
+  blue_score: number;
+  red_damage_dealt: number;
+  blue_damage_dealt: number;
+  scout_reports_used: number;
+  task_completion_rate: number;
+  invalid_action_rate: number;
+  battle_id: string;
+}
+
+export interface EvaluationReport {
+  generated_at: string;
+  seed: number;
+  runs_per_scenario: number;
+  policies: string[];
+  scenarios: string[];
+  summary: Record<string, EvaluationPolicySummary>;
+  runs: EvaluationRun[];
 }

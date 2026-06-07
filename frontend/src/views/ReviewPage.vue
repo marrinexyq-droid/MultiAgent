@@ -166,6 +166,8 @@
               </div>
               <div v-else class="empty-state">暂无关键转折</div>
             </div>
+
+            <LlmDecisionTracePanel :frame="battleStore.currentFrame" :limit="8" />
           </div>
         </template>
         <div v-else class="empty-state">先载入回放后，这里会显示结算信息。</div>
@@ -178,6 +180,7 @@
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import BattleMap from "../components/BattleMap.vue";
+import LlmDecisionTracePanel from "../components/LlmDecisionTracePanel.vue";
 import { useBattleStore } from "../stores/battle";
 
 const props = defineProps<{ id: string }>();
