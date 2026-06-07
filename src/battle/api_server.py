@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -16,6 +19,10 @@ from .api_runtime import (
 from .config import config
 from .terrain import TERRAIN_PRESETS
 from .fantasy_api import router as fantasy_router
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LATEST_EVAL_REPORT = PROJECT_ROOT / "reports" / "eval_latest.json"
 
 
 class BattleCreateRequest(BaseModel):
@@ -57,6 +64,16 @@ def get_roles():
     }
 
 
+@app.get("/api/evaluations/latest")
+def get_latest_evaluation():
+    if not LATEST_EVAL_REPORT.exists():
+        raise HTTPException(status_code=404, detail="evaluation report not found")
+    try:
+        return json.loads(LATEST_EVAL_REPORT.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail="evaluation report is invalid") from exc
+
+
 @app.post("/api/battles")
 def create_battle(payload: BattleCreateRequest):
     session = manager.create_session(payload.mode, payload.max_turns, payload.team_config, payload.scenario_config)
@@ -79,6 +96,26 @@ def start_battle(battle_id: str, payload: BattleStartRequest):
     if payload.mode:
         session.mode = payload.mode
     session.start()
+    return {"battle_id": battle_id, "status": session.status, "mode": session.mode}
+
+
+@app.post("/api/battles/{battle_id}/pause")
+def pause_battle(battle_id: str):
+    try:
+        session = manager.get(battle_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="battle not found") from exc
+    session.pause()
+    return {"battle_id": battle_id, "status": session.status, "mode": session.mode}
+
+
+@app.post("/api/battles/{battle_id}/resume")
+def resume_battle(battle_id: str):
+    try:
+        session = manager.get(battle_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="battle not found") from exc
+    session.resume()
     return {"battle_id": battle_id, "status": session.status, "mode": session.mode}
 
 

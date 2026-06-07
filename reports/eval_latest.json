@@ -1,0 +1,173 @@
+{
+  "generated_at": "2026-06-02T14:25:43Z",
+  "seed": 7,
+  "runs_per_scenario": 2,
+  "policies": [
+    "rule_only"
+  ],
+  "scenarios": [
+    "balanced_square",
+    "scout_pressure_hex",
+    "assault_breakthrough"
+  ],
+  "summary": {
+    "rule_only": {
+      "overall": {
+        "runs": 6,
+        "red_win_rate": 0.3333333333333333,
+        "blue_win_rate": 0.3333333333333333,
+        "draw_rate": 0.3333333333333333,
+        "avg_turns": 20,
+        "avg_red_score": 0.5903333333333334,
+        "avg_blue_score": 0.5021666666666667,
+        "avg_red_damage": 286.8333333333333,
+        "avg_blue_damage": 123.5,
+        "avg_scout_reports_used": 31.166666666666668,
+        "avg_task_completion_rate": 0.4283119658119658,
+        "avg_invalid_action_rate": 0.012612694437331323
+      },
+      "by_scenario": {
+        "balanced_square": {
+          "runs": 2,
+          "red_win_rate": 0.0,
+          "blue_win_rate": 0.5,
+          "draw_rate": 0.5,
+          "avg_turns": 20,
+          "avg_red_score": 0.5675,
+          "avg_blue_score": 0.6085,
+          "avg_red_damage": 384.5,
+          "avg_blue_damage": 218,
+          "avg_scout_reports_used": 52.5,
+          "avg_task_completion_rate": 0.3875,
+          "avg_invalid_action_rate": 0.01881339938664779
+        },
+        "scout_pressure_hex": {
+          "runs": 2,
+          "red_win_rate": 0.0,
+          "blue_win_rate": 0.5,
+          "draw_rate": 0.5,
+          "avg_turns": 20,
+          "avg_red_score": 0.5755,
+          "avg_blue_score": 0.599,
+          "avg_red_damage": 178,
+          "avg_blue_damage": 117.5,
+          "avg_scout_reports_used": 24,
+          "avg_task_completion_rate": 0.6666666666666666,
+          "avg_invalid_action_rate": 0.019024683925346175
+        },
+        "assault_breakthrough": {
+          "runs": 2,
+          "red_win_rate": 1.0,
+          "blue_win_rate": 0.0,
+          "draw_rate": 0.0,
+          "avg_turns": 20,
+          "avg_red_score": 0.628,
+          "avg_blue_score": 0.299,
+          "avg_red_damage": 298,
+          "avg_blue_damage": 35,
+          "avg_scout_reports_used": 17,
+          "avg_task_completion_rate": 0.23076923076923078,
+          "avg_invalid_action_rate": 0.0
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "policy": "rule_only",
+      "scenario": "balanced_square",
+      "seed": 7,
+      "winner": "blue",
+      "reason": "coordination_score",
+      "turns": 20,
+      "red_score": 0.556,
+      "blue_score": 0.621,
+      "red_damage_dealt": 356,
+      "blue_damage_dealt": 213,
+      "scout_reports_used": 56,
+      "task_completion_rate": 0.4,
+      "invalid_action_rate": 0.018518518518518517,
+      "battle_id": "2d4024ad"
+    },
+    {
+      "policy": "rule_only",
+      "scenario": "balanced_square",
+      "seed": 8,
+      "winner": null,
+      "reason": "draw",
+      "turns": 20,
+      "red_score": 0.579,
+      "blue_score": 0.596,
+      "red_damage_dealt": 413,
+      "blue_damage_dealt": 223,
+      "scout_reports_used": 49,
+      "task_completion_rate": 0.375,
+      "invalid_action_rate": 0.01910828025477707,
+      "battle_id": "e11c7b86"
+    },
+    {
+      "policy": "rule_only",
+      "scenario": "scout_pressure_hex",
+      "seed": 7,
+      "winner": null,
+      "reason": "draw",
+      "turns": 20,
+      "red_score": 0.59,
+      "blue_score": 0.579,
+      "red_damage_dealt": 186,
+      "blue_damage_dealt": 102,
+      "scout_reports_used": 24,
+      "task_completion_rate": 0.6666666666666666,
+      "invalid_action_rate": 0.01818181818181818,
+      "battle_id": "95712f63"
+    },
+    {
+      "policy": "rule_only",
+      "scenario": "scout_pressure_hex",
+      "seed": 8,
+      "winner": "blue",
+      "reason": "coordination_score",
+      "turns": 20,
+      "red_score": 0.561,
+      "blue_score": 0.619,
+      "red_damage_dealt": 170,
+      "blue_damage_dealt": 133,
+      "scout_reports_used": 24,
+      "task_completion_rate": 0.6666666666666666,
+      "invalid_action_rate": 0.019867549668874173,
+      "battle_id": "f1971843"
+    },
+    {
+      "policy": "rule_only",
+      "scenario": "assault_breakthrough",
+      "seed": 7,
+      "winner": "red",
+      "reason": "coordination_score",
+      "turns": 20,
+      "red_score": 0.616,
+      "blue_score": 0.299,
+      "red_damage_dealt": 287,
+      "blue_damage_dealt": 35,
+      "scout_reports_used": 17,
+      "task_completion_rate": 0.23076923076923078,
+      "invalid_action_rate": 0.0,
+      "battle_id": "c5032655"
+    },
+    {
+      "policy": "rule_only",
+      "scenario": "assault_breakthrough",
+      "seed": 8,
+      "winner": "red",
+      "reason": "coordination_score",
+      "turns": 20,
+      "red_score": 0.64,
+      "blue_score": 0.299,
+      "red_damage_dealt": 309,
+      "blue_damage_dealt": 35,
+      "scout_reports_used": 17,
+      "task_completion_rate": 0.23076923076923078,
+      "invalid_action_rate": 0.0,
+      "battle_id": "555ea3c2"
+    }
+  ]
+}

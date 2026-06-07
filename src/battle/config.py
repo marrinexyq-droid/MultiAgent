@@ -32,7 +32,27 @@ class BattleConfig:
 
     def __post_init__(self):
         project_env = load_project_env()
-        self.api_key = os.getenv("SILICONFLOW_API_KEY") or project_env.get("SILICONFLOW_API_KEY") or None
+        self.api_key = (
+            os.getenv("OPENAI_API_KEY")
+            or os.getenv("SILICONFLOW_API_KEY")
+            or project_env.get("OPENAI_API_KEY")
+            or project_env.get("SILICONFLOW_API_KEY")
+            or None
+        )
+        self.api_base_url = (
+            os.getenv("OPENAI_BASE_URL")
+            or os.getenv("SILICONFLOW_BASE_URL")
+            or project_env.get("OPENAI_BASE_URL")
+            or project_env.get("SILICONFLOW_BASE_URL")
+            or self.api_base_url
+        )
+        self.model = (
+            os.getenv("OPENAI_MODEL")
+            or os.getenv("SILICONFLOW_MODEL")
+            or project_env.get("OPENAI_MODEL")
+            or project_env.get("SILICONFLOW_MODEL")
+            or self.model
+        )
         os.makedirs(self.log_dir, exist_ok=True)
 
 
