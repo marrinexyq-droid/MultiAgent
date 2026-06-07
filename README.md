@@ -1,35 +1,28 @@
-# 多智能体战术对抗推演平台
+# LLM Agent 多智能体策略评测与可观测平台
 
-基于六边形网格的多智能体战术对抗仿真平台，支持实时可视化、战斗回放和统计分析。
+面向 AI 应用工程师场景的多智能体策略评测平台，支持可配置推演场景、Rule / LLM / Hybrid 决策策略、共享记忆、LLM 决策追踪、战斗回放和自动化评测报告。
 
 ## 功能特性
 
-### 推演引擎
-- **六边形网格系统** — 轴向坐标的距离计算、寻路、视线(LOS)、AoE范围判定
-- **8 种地形** — 开阔/道路/森林/城区/水域/崎岖/沼泽/山脉，各有不同的移动消耗、掩护加成、隐蔽度和视野阻挡
-- **回合制战斗** — 移动、攻击、技能施放、buff/debuff、伤害/治疗结算
-- **战争迷雾** — 按队伍独立的可见性网格，地形成熟度影响视野
-- **LB 极限技** — 团队共享能量槽（每回合基础+3，每承受200伤害额外+1）
+### Agent 评测闭环
+- **策略对比** — 支持 Rule / LLM / Hybrid 决策策略的批量仿真与指标对比。
+- **自动化评测报告** — 输出胜率、平均回合数、任务完成率、侦察情报使用量、无效行动率等指标。
+- **确定性场景** — 内置 balanced、scout pressure、assault breakthrough 等评测场景，支持固定 seed 复现。
 
-### AI 决策
-- **混合 LLM+规则 AI** — 接入 OpenAI 兼容 API 时使用 LLM 决策，否则降级为角色专属规则策略
-- **共享记忆池** — 基于概率置信度的信念系统，支持多源交叉验证、按角色加权的信源信任度、逐回合衰减
-- **6 种角色** — 指挥官、侦察兵、突击手、防御者、支援、控制器，各自的上下文裁剪和决策逻辑不同
+### LLM 决策工程化
+- **结构化输出校验** — 对 LLM action JSON 进行解析、越界校验和无效目标拦截。
+- **规则兜底** — 模型异常、超时、非法动作时自动 fallback 到规则策略，保证推演不中断。
+- **决策 Trace** — 记录每个 Agent 的 latency、token usage、fallback reason 和最终动作。
 
-### 可视化
-- **SVG 六边形渲染** — 3D 斜角效果 + 对角线光照（军事科技主题）
-- **魔幻模式** — FF14 风格的 8 人小队对战，40+ 技能、连击链、职业系统
-- **战斗回放** — 逐帧对比、差异叠加、关键事件自动暂停
-- **伤害数字** — 浮动伤害/治疗/暴击指示器，CSS 动画
-- **施法条** — 单位头顶施法进度条
-- **DPS/HPS 图表** — 实时柱状图，弹性过渡动画
-- **交互地图** — 悬停提示、Buff 图标、死亡标记、AoE 危险区域
+### 多智能体记忆
+- **共享记忆池** — 管理 observations、beliefs、risk zones、tasks 和 summaries。
+- **置信度衰减** — 支持按回合衰减、低置信度清理和多源交叉验证。
+- **角色上下文裁剪** — 按侦察、攻击、防御、支援等角色读取不同粒度的团队记忆。
 
-### 统计与分析
-- 累计伤害输出/承受/治疗量
-- DPS/HPS/承伤实时统计
-- 战斗结算 MVP 计算
-- 彩色战斗日志（红=攻击，绿=治疗，金=结果）
+### 可视化复盘
+- **Evaluation Dashboard** — 作为主入口展示策略指标、场景分解和运行样本。
+- **战斗回放** — 支持逐帧播放、速度控制、关键事件跳转和帧差查看。
+- **LLM Trace / Memory Inspector** — 在复盘中查看模型决策、共享记忆和关键转折。
 
 ## 技术栈
 
@@ -38,22 +31,46 @@
 | 前端 | Vue 3 + TypeScript + Vite |
 | 后端 | Python + FastAPI |
 | AI | OpenAI 兼容 API（SiliconFlow）+ 规则降级 |
-| 部署 | FastAPI 单服务 + 静态前端 |
+| 评测 | Deterministic scenarios + JSON / Markdown reports |
+| 部署 | FastAPI API + Vue 前端 |
 
 ## 快速启动
 
+### 环境要求
+
+- Python 3.10+
+- Node.js 18+
+- npm 9+
+
 ### 后端
 
-```bash
+macOS / Linux:
+
+```sh
 python -m venv venv
 source venv/bin/activate
-pip install fastapi uvicorn
+pip install -r requirements.txt
 python -m src.battle.api_server
+```
+
+Windows PowerShell:
+
+```powershell
+py -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m src.battle.api_server
+```
+
+健康检查:
+
+```sh
+curl http://localhost:8000/api/health
 ```
 
 ### 前端
 
-```bash
+```sh
 cd frontend
 npm install
 npm run dev
@@ -61,9 +78,46 @@ npm run dev
 
 浏览器打开 `http://localhost:5173`。
 
-### 魔幻模式
+推荐主入口：`http://localhost:5173/evaluation`。
 
-启动 API 服务器后，导航到 `/fantasy` 路由。魔幻模式使用同一后端，独立的 agent 配置和 8 人小队格式。
+### LLM 配置
+
+项目默认可在无 API Key 时使用规则策略运行。需要启用 OpenAI-compatible LLM 决策时，复制 `.env.example` 为 `.env` 并填写：
+
+```env
+OPENAI_API_KEY=your_key
+OPENAI_BASE_URL=https://api.siliconflow.cn/v1
+OPENAI_MODEL=Qwen/Qwen2.5-7B-Instruct
+```
+
+旧版 `SILICONFLOW_API_KEY` / `SILICONFLOW_BASE_URL` / `SILICONFLOW_MODEL` 仍然兼容。
+
+### 测试
+
+```sh
+python -m unittest
+cd frontend
+npm run build
+```
+
+### 策略评测
+
+运行内置的多智能体策略评测，生成 JSON 和 Markdown 报告：
+
+```sh
+python -m src.battle.eval_runner --runs 20
+```
+
+输出文件：
+
+- `reports/eval_latest.json`
+- `reports/eval_latest.md`
+
+报告包含胜率、平均回合数、任务完成率、侦察情报使用量和无效行动率，可作为简历项目中的量化指标来源。
+
+### 实验模式
+
+`/fantasy` 和早期 square grid 页面保留为实验入口，不作为当前项目主线展示。当前主线聚焦于 Agent 策略评测、LLM 决策追踪和多智能体记忆分析。
 
 ## 项目结构
 
@@ -71,33 +125,31 @@ npm run dev
 src/
 ├── battle/
 │   ├── env.py                # 基础战场环境
-│   ├── ff14_env.py           # 魔幻模式战斗引擎（8v8，40+ 技能）
 │   ├── grid_rules.py         # 六边形网格数学（距离、视线、邻居）
 │   ├── terrain.py            # 地形属性和预设生成器
 │   ├── battle_types.py       # 共享数据模型
 │   ├── stats.py              # 统计追踪
 │   ├── memory.py             # 共享记忆池（信念 + 衰减）
-│   ├── fantasy_api.py        # 魔幻模式 FastAPI 路由
+│   ├── llm_actions.py        # LLM action 解析、校验与 fallback
+│   ├── eval_runner.py        # 策略评测 runner 和报告生成
 │   ├── api_server.py         # 主 FastAPI 服务器
-│   ├── ff14_skills.py        # 技能定义 + 连击链
-│   └── ff14_roster.py        # 职业模板（8 种角色）
-├── agents/
-│   ├── ff14_agent.py         # 魔幻模式混合 LLM+规则 agent
-│   ├── generic.py            # 规则驱动战术 agent
-│   ├── red/                  # 红方 agent 实现
-│   └── blue/                 # 蓝方 agent 实现
+│   └── agents/
+│       ├── base.py           # LLM / rule 混合决策基类
+│       └── generic.py        # 规则驱动战术 agent
 frontend/
 ├── src/
 │   ├── components/
-│   │   ├── FantasyMap.vue    # 魔幻地图（单位徽标、特效）
+│   │   ├── BattleReplayControls.vue # 回放控制
+│   │   ├── LlmDecisionTracePanel.vue # LLM 决策追踪
 │   │   ├── HexBattleMap.vue  # 军事地图（3D 地形、迷雾）
-│   │   ├── HexDamageNumber.vue # 浮动伤害数字
 │   │   └── ...
 │   ├── views/
-│   │   ├── FantasyPage.vue   # 魔幻战斗主页面
-│   │   ├── HexLabPage.vue    # 军事推演主页面
+│   │   ├── EvaluationPage.vue # 策略评测仪表盘
+│   │   ├── DeploymentPage.vue # 场景配置
+│   │   ├── BattlePage.vue    # 推演运行
+│   │   ├── ReviewPage.vue    # 复盘分析
 │   │   └── ...
-│   └── styles.css            # 全局样式（暗色主题）
+│   └── styles.css            # 全局样式
 ```
 
 ## 核心挑战
@@ -136,7 +188,7 @@ frontend/
 │  • 角色加权信源信任度表 (coordinator 1.0 / scout 1.15 / ...)       │
 │  • LLM API 调用 (OpenAI-compatible) 或 规则兜底                    │
 │  • 目标选择 (距离/血量/威胁度/角色优先级)                           │
-│  • 技能组合 (combo链/冷却/资源消耗)                                │
+│  • 结构化 action 校验 (JSON/越界/无效目标/fallback)                │
 │  • 走位规划 (掩护/LOS/危险区回避)                                  │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
@@ -155,7 +207,7 @@ frontend/
 │  • 8 种地形 (移动消耗/掩护加成/隐蔽/视野阻挡)                     │
 │  • 战斗裁定 (伤害公式/buff/debuff/冷却)                            │
 │  • 战争迷雾 (按队伍独立可见性)                                     │
-│  • LB 能量槽 (+3/回合 +1/200伤害)                                  │
+│  • 任务完成、控制区和情报利用统计                                  │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
                                  ▼
@@ -180,17 +232,17 @@ frontend/
 
 | 指标 | 数值 |
 |------|------|
-| 推演角色 | 6 种 (Commander/Scout/Attacker/Defender/Support/Controller) |
-| 魔幻职业 | 8 种 (暗黑骑士/战士/龙骑/武僧/黑魔/诗人/白魔/学者) |
-| 最大单位数 | 16 (8v8) |
-| 单局回合数 | 30-60 回合 (上限 80) |
+| 推演角色 | 8 种 (Coordinator/Scout/Attacker/Defender/Support/Jammer/Controller/Assaulter) |
+| 默认评测场景 | 3 个 (balanced / scout pressure / assault breakthrough) |
+| 评测策略 | rule_only / hybrid |
+| 单局回合数 | 默认 20-40 回合，可配置上限 80 |
 | 地形类型 | 8 种 |
-| 技能总数 | 40+ (含 combo 链) |
 | 信源权重系数 | 0.85-1.15 (按角色/消息类型) |
 | 衰减率 | 0.85/回合 |
 | 置信度阈值 | 0.1 (删除) / 0.3 (读取) |
 | 记忆上限 | 80 条 observation / 20 条 summary |
-| 前端包体积 | CSS 112KB (gzip 22KB) + JS 246KB (gzip 85KB) |
+| 评测报告 | JSON + Markdown |
+| 前端包体积 | 见 `npm run build` 输出 |
 
 ## 许可证
 
