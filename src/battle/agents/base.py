@@ -1,5 +1,6 @@
 import json
 import random
+import time
 from typing import Any
 
 try:
@@ -10,6 +11,10 @@ except ImportError:  # pragma: no cover - depends on local environment
 from ..battle_types import Action, ActionType, Position, AgentState, Role
 from ..config import config
 from ..grid_rules import distance as grid_distance, neighbors as grid_neighbors, step_toward
+from ..llm_actions import parse_llm_action_response
+
+
+_shared_llm_client: Any | None = None
 
 
 class AgentBase:
@@ -20,11 +25,15 @@ class AgentBase:
         self._prev_action = None
         self._prev_target = None
         self._recent_positions: list[Position] = [Position(state.pos.x, state.pos.y)]
+        self.last_llm_trace: dict[str, Any] | None = None
 
     def _build_client(self) -> Any:
         if not config.api_key or OpenAI is None:
             return None
-        return OpenAI(api_key=config.api_key, base_url=config.api_base_url)
+        global _shared_llm_client
+        if _shared_llm_client is None:
+            _shared_llm_client = OpenAI(api_key=config.api_key, base_url=config.api_base_url, timeout=8)
+        return _shared_llm_client
 
     def choose_action(self, obs: dict, shared_memory: dict) -> Action:
         self.turn_count = obs.get("turn", 0)
@@ -225,37 +234,78 @@ class AgentBase:
         return prompt
 
     def _llm_action(self, obs: dict, shared_memory: dict) -> Action:
+        started_at = time.perf_counter()
+        trace = {
+            "agent_id": self.state.agent_id,
+            "ok": False,
+            "fallback_reason": None,
+            "latency_ms": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "raw_completion": None,
+            "llm_error": None,
+            "json_mode_requested": True,
+        }
         try:
             prompt = self._build_prompt(obs, shared_memory)
-            response = self.client.chat.completions.create(
-                model=config.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=200,
-            )
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a battle simulation action planner. "
+                        "Return exactly one valid minified JSON object and no prose, markdown, or code fence."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ]
+            request_payload = {
+                "model": config.model,
+                "messages": messages,
+                "temperature": 0.2,
+                "max_tokens": 512,
+            }
+            try:
+                response = self.client.chat.completions.create(
+                    **request_payload,
+                    response_format={"type": "json_object"},
+                )
+            except Exception as json_mode_error:
+                error_text = str(json_mode_error)
+                if not any(keyword in error_text.lower() for keyword in ("response_format", "json_object", "json mode")):
+                    raise
+                trace["json_mode_requested"] = False
+                trace["llm_error"] = error_text[:500]
+                response = self.client.chat.completions.create(**request_payload)
             content = response.choices[0].message.content.strip()
-            content = content.strip("```json").strip("```").strip()
-            data = json.loads(content)
-
-            action_type = ActionType(data.get("action_type", "hold"))
-            target = None
-            if "target" in data:
-                target = Position(x=data["target"]["x"], y=data["target"]["y"])
-            skill_target = None
-            if "skill_target" in data:
-                skill_target = Position(x=data["skill_target"]["x"], y=data["skill_target"]["y"])
-            
-            return Action(
+            trace["raw_completion"] = content[:1200]
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                trace["prompt_tokens"] = getattr(usage, "prompt_tokens", None)
+                trace["completion_tokens"] = getattr(usage, "completion_tokens", None)
+                trace["total_tokens"] = getattr(usage, "total_tokens", None)
+            valid_targets = {
+                item["agent_id"]
+                for item in obs.get("visible_enemies", []) + obs.get("visible_allies", [])
+                if item.get("agent_id")
+            }
+            parsed = parse_llm_action_response(
+                content,
                 agent_id=self.state.agent_id,
-                action_type=action_type,
-                target=target,
-                target_id=data.get("target_id"),
-                skill_id=data.get("skill_id"),
-                skill_target=skill_target,
-                message=data.get("message"),
+                width=obs.get("width", obs.get("grid_size", 8)),
+                height=obs.get("height", obs.get("grid_size", 8)),
+                valid_target_ids=valid_targets,
             )
-        except Exception:
+            trace["ok"] = parsed.ok
+            trace["fallback_reason"] = parsed.fallback_reason
+            return parsed.action if parsed.ok else self._rule_action(obs)
+        except Exception as exc:
+            trace["fallback_reason"] = "llm_call_failed"
+            trace["llm_error"] = str(exc)[:500]
             return self._rule_action(obs)
+        finally:
+            trace["latency_ms"] = round((time.perf_counter() - started_at) * 1000, 2)
+            self.last_llm_trace = trace
 
     def _rule_action(self, obs: dict) -> Action:
         enemies = obs.get("visible_enemies", [])

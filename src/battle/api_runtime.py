@@ -376,7 +376,22 @@ def _serialize_memory(memory_view: dict, env=None, team: Team | None = None) -> 
     }
 
 
-def capture_structured_frame(env, mode_label: str, phase_label: str, memory_red: SharedMemoryPool, memory_blue: SharedMemoryPool) -> dict[str, Any]:
+def _llm_mode_enabled(agents: dict[str, Any] | None = None) -> bool:
+    if agents:
+        return any(getattr(agent, "client", None) is not None for agent in agents.values())
+    return bool(config.api_key)
+
+
+def capture_structured_frame(
+    env,
+    mode_label: str,
+    phase_label: str,
+    memory_red: SharedMemoryPool,
+    memory_blue: SharedMemoryPool,
+    *,
+    llm_decision_traces: list[dict[str, Any]] | None = None,
+    llm_mode_enabled: bool | None = None,
+) -> dict[str, Any]:
     red_view = _memory_view_for_team(Team.RED, env, memory_red)
     blue_view = _memory_view_for_team(Team.BLUE, env, memory_blue)
     visibility_red = env.compute_team_visibility(Team.RED) if hasattr(env, 'compute_team_visibility') else None
@@ -397,11 +412,14 @@ def capture_structured_frame(env, mode_label: str, phase_label: str, memory_red:
             "blue": _serialize_memory(blue_view, env=env, team=Team.BLUE),
         },
         "advice_items": _build_advice_items(env, memory_red, memory_blue),
+        "llm_mode_enabled": bool(llm_mode_enabled) if llm_mode_enabled is not None else _llm_mode_enabled(),
+        "llm_decision_traces": llm_decision_traces or [],
     }
 
 
 def _build_actions(agents, env, memory_red, memory_blue, turn: int):
     actions = []
+    llm_decision_traces: list[dict[str, Any]] = []
     for agent_id, agent in agents.items():
         if not agent.state.alive:
             continue
@@ -411,6 +429,13 @@ def _build_actions(agents, env, memory_red, memory_blue, turn: int):
         shared_mem = memory_red.read(agent_id) if agent.state.team == Team.RED else memory_blue.read(agent_id)
         action = agent.choose_action(obs, shared_mem)
         actions.append(action)
+        if getattr(agent, "client", None) is not None and getattr(agent, "last_llm_trace", None):
+            trace = dict(agent.last_llm_trace)
+            trace["turn"] = turn
+            trace["team"] = agent.state.team.value
+            trace["role"] = agent.state.role.value
+            trace["decision_action_type"] = action.action_type.value
+            llm_decision_traces.append(trace)
         if action.action_type.value == "communicate":
             try:
                 content = json.loads(action.message)
@@ -428,7 +453,7 @@ def _build_actions(agents, env, memory_red, memory_blue, turn: int):
                 memory_red.write(msg)
             else:
                 memory_blue.write(msg)
-    return actions
+    return actions, llm_decision_traces
 
 
 def _write_event_to_memory(memory_pool: SharedMemoryPool, sender_id: str, sender_role: Role, payload: dict[str, Any], turn: int) -> None:
@@ -535,15 +560,34 @@ class BattleSession:
     started: bool = False
 
     def start(self) -> None:
+        if self.status == "done":
+            return
         self.started = True
         self.status = "running" if self.mode == "实时推演" else "computing"
 
+    def pause(self) -> None:
+        if self.status == "running":
+            self.status = "paused"
+
+    def resume(self) -> None:
+        if self.status == "paused":
+            self.status = "running"
+
     def ensure_initial_frame(self):
         if not self.frames:
-            self.frames.append(capture_structured_frame(self.env, self.mode, self.status, self.memory_red, self.memory_blue))
+            self.frames.append(
+                capture_structured_frame(
+                    self.env,
+                    self.mode,
+                    self.status,
+                    self.memory_red,
+                    self.memory_blue,
+                    llm_mode_enabled=_llm_mode_enabled(self.agents),
+                )
+            )
 
     def step_once(self, turn: int) -> tuple[dict[str, Any], bool]:
-        actions = _build_actions(self.agents, self.env, self.memory_red, self.memory_blue, turn)
+        actions, llm_decision_traces = _build_actions(self.agents, self.env, self.memory_red, self.memory_blue, turn)
         _record_visible_enemy_contacts(self.agents, self.env, self.memory_red, self.memory_blue, turn)
         _, done = self.env.step(actions)
         _bridge_structured_events_to_memory(self, self.env.turn)
@@ -553,7 +597,15 @@ class BattleSession:
             self.memory_red.decay()
             self.memory_blue.decay()
         phase = "实时推演中" if self.mode == "实时推演" else "计算完成"
-        frame = capture_structured_frame(self.env, self.mode, phase if not done else "已结束", self.memory_red, self.memory_blue)
+        frame = capture_structured_frame(
+            self.env,
+            self.mode,
+            phase if not done else "已结束",
+            self.memory_red,
+            self.memory_blue,
+            llm_decision_traces=llm_decision_traces,
+            llm_mode_enabled=_llm_mode_enabled(self.agents),
+        )
         self.frames.append(frame)
         if done:
             self.complete()
@@ -641,6 +693,10 @@ def stream_battle(session: BattleSession):
         yield sse_event("done", session.summary_payload())
         return
     for turn in range(1, session.max_turns + 1):
+        while session.status == "paused":
+            time.sleep(0.1)
+        if session.status == "done":
+            break
         frame, done = session.step_once(turn)
         yield sse_event("frame", {"battle_id": session.battle_id, "frame": frame, "summary": session.result})
         time.sleep(0.05)
