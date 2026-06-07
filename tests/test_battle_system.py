@@ -1,18 +1,23 @@
 import io
 import os
 import tempfile
+import threading
+import time
 import unittest
 from contextlib import redirect_stdout
+from pathlib import Path
 
 try:
     from fastapi.testclient import TestClient
 except ImportError:  # pragma: no cover - depends on local runtime
     TestClient = None
 
-from src.battle.battle_types import Action, ActionType, AgentState, Message, Position, Role, Team
-from src.battle.config import config
+from src.battle.battle_types import Action, ActionType, AgentState, Message, Position, RectZone, Role, ScenarioConfig, Team, TerrainCell, TerrainType
+from src.battle.config import BattleConfig, config
 from src.battle.env import BattlefieldEnv
+from src.battle.eval_runner import build_default_scenarios, run_evaluation
 from src.battle.judge import BattleJudge
+from src.battle.llm_actions import parse_llm_action_response
 from src.battle.memory import SharedMemoryPool
 from src.battle.roster import ROLE_TEMPLATES, build_agents_from_team_config, default_scenario_config, default_team_config
 from src.battle.runner import create_agents, main
@@ -149,7 +154,15 @@ class BattleSystemTests(unittest.TestCase):
         self.assertGreaterEqual(atk_record.targeted_strikes, 1)
 
     def test_env_blocks_overlapping_moves(self):
-        env = BattlefieldEnv(grid_size=8)
+        scenario = ScenarioConfig(
+            width=8,
+            height=8,
+            red_spawn_zones=[RectZone(0, 0, 3, 8)],
+            blue_spawn_zones=[RectZone(5, 0, 3, 8)],
+            control_zones=[RectZone(3, 3, 2, 2)],
+            terrain_grid=[[TerrainCell(TerrainType.OPEN) for _ in range(8)] for _ in range(8)],
+        )
+        env = BattlefieldEnv(scenario_config=scenario)
         red_a = AgentState("red_a", Team.RED, Role.ATTACKER, Position(1, 1))
         red_b = AgentState("red_b", Team.RED, Role.ATTACKER, Position(3, 1))
         blue_a = AgentState("blue_a", Team.BLUE, Role.DEFENDER, Position(6, 6))
@@ -295,6 +308,29 @@ class BattleSystemTests(unittest.TestCase):
         self.assertIn("defaults", payload["roles"]["coordinator"])
         self.assertIn("target_preference_options", payload["roles"]["coordinator"])
 
+    def test_api_latest_evaluation_returns_report(self):
+        if self.client is None:
+            self.skipTest("fastapi not available in current python runtime")
+        from src.battle import api_server
+
+        original_path = api_server.LATEST_EVAL_REPORT
+        with tempfile.TemporaryDirectory() as tmpdir:
+            report_path = Path(tmpdir) / "eval_latest.json"
+            report_path.write_text(
+                '{"generated_at":"2026-06-06T00:00:00Z","seed":7,"runs_per_scenario":1,"policies":["rule_only"],"scenarios":["balanced_square"],"summary":{},"runs":[]}',
+                encoding="utf-8",
+            )
+            try:
+                api_server.LATEST_EVAL_REPORT = report_path
+                response = self.client.get("/api/evaluations/latest")
+            finally:
+                api_server.LATEST_EVAL_REPORT = original_path
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["policies"], ["rule_only"])
+        self.assertEqual(payload["scenarios"], ["balanced_square"])
+
     def test_api_battle_frames_endpoint_returns_frames(self):
         if self.client is None:
             self.skipTest("fastapi not available in current python runtime")
@@ -312,6 +348,78 @@ class BattleSystemTests(unittest.TestCase):
         self.assertIn("timeline_markers", payload["frames"][0])
         self.assertIn("effect_details", payload["frames"][0])
         self.assertIn("status_flags", payload["frames"][0]["units"][0])
+        self.assertIn("llm_mode_enabled", payload["frames"][0])
+        self.assertIn("llm_decision_traces", payload["frames"][0])
+        self.assertFalse(payload["frames"][0]["llm_mode_enabled"])
+        self.assertEqual(payload["frames"][0]["llm_decision_traces"], [])
+
+    def test_api_pause_resume_routes_update_live_session(self):
+        if self.client is None:
+            self.skipTest("fastapi not available in current python runtime")
+        create = self.client.post("/api/battles", json={"mode": "实时推演", "max_turns": 10})
+        self.assertEqual(create.status_code, 200)
+        battle_id = create.json()["battle_id"]
+
+        start = self.client.post(f"/api/battles/{battle_id}/start", json={"mode": "实时推演"})
+        self.assertEqual(start.status_code, 200)
+        self.assertEqual(start.json()["status"], "running")
+
+        pause = self.client.post(f"/api/battles/{battle_id}/pause")
+        self.assertEqual(pause.status_code, 200)
+        self.assertEqual(pause.json()["status"], "paused")
+
+        resume = self.client.post(f"/api/battles/{battle_id}/resume")
+        self.assertEqual(resume.status_code, 200)
+        self.assertEqual(resume.json()["status"], "running")
+
+    def test_stream_battle_waits_while_session_is_paused(self):
+        from src.battle.api_runtime import BattleSessionManager, stream_battle
+
+        session = BattleSessionManager().create_session("实时推演", 10)
+        events = stream_battle(session)
+        first_event = next(events)
+        self.assertIn("event: frame", first_event)
+
+        session.pause()
+        next_event: list[str] = []
+        frame_ready = threading.Event()
+
+        def read_next_event():
+            next_event.append(next(events))
+            frame_ready.set()
+
+        thread = threading.Thread(target=read_next_event, daemon=True)
+        thread.start()
+        time.sleep(0.2)
+        self.assertFalse(frame_ready.is_set())
+
+        session.resume()
+        self.assertTrue(frame_ready.wait(2))
+        self.assertIn("event: frame", next_event[0])
+
+    def test_structured_frames_expose_llm_decision_traces(self):
+        from src.battle.api_runtime import BattleSessionManager
+
+        session = BattleSessionManager().create_session("演练后回放", 1)
+
+        initial_frame = session.frames[0]
+        self.assertFalse(initial_frame["llm_mode_enabled"])
+        self.assertEqual(initial_frame["llm_decision_traces"], [])
+
+        for agent in session.agents.values():
+            agent.client = object()
+
+        frame, _ = session.step_once(1)
+
+        self.assertTrue(frame["llm_mode_enabled"])
+        self.assertTrue(frame["llm_decision_traces"])
+        trace = frame["llm_decision_traces"][0]
+        self.assertIn("agent_id", trace)
+        self.assertIn("latency_ms", trace)
+        self.assertIn("total_tokens", trace)
+        self.assertIn("raw_completion", trace)
+        self.assertIn("json_mode_requested", trace)
+        self.assertEqual(trace["fallback_reason"], "llm_call_failed")
 
     def test_create_agents_returns_expected_teams(self):
         agents, red_states, blue_states = create_agents()
@@ -365,6 +473,100 @@ class BattleSystemTests(unittest.TestCase):
         self.assertIn("target_preference", red_attacker)
         self.assertIn("risk_preference", red_attacker)
         self.assertIn("skill_trigger_threshold", red_attacker)
+
+    def test_config_accepts_openai_compatible_environment(self):
+        original = {
+            "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY"),
+            "OPENAI_BASE_URL": os.environ.get("OPENAI_BASE_URL"),
+            "OPENAI_MODEL": os.environ.get("OPENAI_MODEL"),
+        }
+        try:
+            os.environ["OPENAI_API_KEY"] = "test-key"
+            os.environ["OPENAI_BASE_URL"] = "https://example.test/v1"
+            os.environ["OPENAI_MODEL"] = "test-model"
+
+            test_config = BattleConfig()
+
+            self.assertEqual(test_config.api_key, "test-key")
+            self.assertEqual(test_config.api_base_url, "https://example.test/v1")
+            self.assertEqual(test_config.model, "test-model")
+        finally:
+            for key, value in original.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_eval_runner_builds_default_scenarios(self):
+        scenarios = build_default_scenarios()
+
+        self.assertGreaterEqual(len(scenarios), 3)
+        self.assertIn("balanced_square", {scenario.name for scenario in scenarios})
+        self.assertTrue(all(scenario.team_config for scenario in scenarios))
+        self.assertTrue(all(scenario.scenario_config for scenario in scenarios))
+
+    def test_eval_runner_returns_metric_report(self):
+        scenarios = build_default_scenarios()[:1]
+
+        report = run_evaluation(runs=1, policies=["rule_only"], scenarios=scenarios, seed=7)
+
+        self.assertEqual(report["runs_per_scenario"], 1)
+        self.assertEqual(report["policies"], ["rule_only"])
+        self.assertEqual(len(report["runs"]), 1)
+        run = report["runs"][0]
+        self.assertIn("task_completion_rate", run)
+        self.assertIn("invalid_action_rate", run)
+        self.assertIn("rule_only", report["summary"])
+        self.assertIn("overall", report["summary"]["rule_only"])
+
+    def test_llm_action_parser_accepts_valid_move_json(self):
+        parsed = parse_llm_action_response(
+            '{"action_type":"move","target":{"x":2,"y":3}}',
+            agent_id="red_scout_1",
+            width=8,
+            height=8,
+        )
+
+        self.assertTrue(parsed.ok)
+        self.assertEqual(parsed.action.action_type, ActionType.MOVE)
+        self.assertEqual(parsed.action.target, Position(2, 3))
+
+    def test_llm_action_parser_falls_back_on_malformed_json(self):
+        parsed = parse_llm_action_response(
+            "not json",
+            agent_id="red_scout_1",
+            width=8,
+            height=8,
+        )
+
+        self.assertFalse(parsed.ok)
+        self.assertEqual(parsed.action.action_type, ActionType.HOLD)
+        self.assertTrue(parsed.fallback_reason.startswith("invalid_json"))
+
+    def test_llm_action_parser_rejects_out_of_bounds_move(self):
+        parsed = parse_llm_action_response(
+            '{"action_type":"move","target":{"x":99,"y":3}}',
+            agent_id="red_scout_1",
+            width=8,
+            height=8,
+        )
+
+        self.assertFalse(parsed.ok)
+        self.assertEqual(parsed.action.action_type, ActionType.HOLD)
+        self.assertEqual(parsed.fallback_reason, "move_target_out_of_bounds")
+
+    def test_llm_action_parser_rejects_unknown_target(self):
+        parsed = parse_llm_action_response(
+            '{"action_type":"attack","target_id":"blue_missing"}',
+            agent_id="red_attacker_1",
+            width=8,
+            height=8,
+            valid_target_ids={"blue_defender_1"},
+        )
+
+        self.assertFalse(parsed.ok)
+        self.assertEqual(parsed.action.action_type, ActionType.HOLD)
+        self.assertEqual(parsed.fallback_reason, "invalid_target:blue_missing")
 
     def test_attacker_skill_and_cooldown_work(self):
         env = BattlefieldEnv(grid_size=8)
