@@ -1,3 +1,9 @@
+"""SQLite persistence for battle runs and replay frames.
+
+The runtime keeps active sessions in memory, while this module stores enough
+metadata and frame payloads to reopen completed replays after a process restart.
+"""
+
 from __future__ import annotations
 
 import json
@@ -14,6 +20,7 @@ def _utc_now() -> str:
 
 
 def _jsonable(value: Any) -> Any:
+    """Convert runtime objects such as Enum values into JSON-safe primitives."""
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, dict):
@@ -39,6 +46,8 @@ def _json_loads(value: str | None, default: Any) -> Any:
 
 
 class BattleStorage:
+    """Small repository wrapper around the battle replay SQLite database."""
+
     def __init__(self, db_path: str | Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -50,6 +59,7 @@ class BattleStorage:
         return conn
 
     def init_schema(self) -> None:
+        """Create tables lazily so local demos work without a migration step."""
         with closing(self.connect()) as conn:
             with conn:
                 conn.execute(
@@ -97,6 +107,7 @@ class BattleStorage:
         scenario_config: dict[str, Any],
         summary: dict[str, Any] | None,
     ) -> None:
+        """Insert or update the run summary shown by the history page."""
         result = (summary or {}).get("result") or {}
         winner = result.get("winner")
         reason = result.get("reason")
@@ -146,6 +157,7 @@ class BattleStorage:
                 )
 
     def upsert_frame(self, battle_id: str, turn_index: int, frame: dict[str, Any]) -> None:
+        """Persist one structured replay frame at a stable turn index."""
         with closing(self.connect()) as conn:
             with conn:
                 conn.execute(
@@ -160,6 +172,7 @@ class BattleStorage:
                 )
 
     def load_run(self, battle_id: str) -> dict[str, Any] | None:
+        """Load one run with full payloads for replay restoration."""
         with closing(self.connect()) as conn:
             row = conn.execute("SELECT * FROM battle_runs WHERE battle_id = ?", (battle_id,)).fetchone()
         if row is None:
@@ -167,6 +180,7 @@ class BattleStorage:
         return self._row_to_history_item(row, include_payload=True)
 
     def load_frames(self, battle_id: str) -> list[dict[str, Any]]:
+        """Return replay frames in chronological order."""
         with closing(self.connect()) as conn:
             rows = conn.execute(
                 "SELECT frame_json FROM battle_frames WHERE battle_id = ? ORDER BY turn_index ASC",
@@ -175,6 +189,7 @@ class BattleStorage:
         return [_json_loads(row["frame_json"], {}) for row in rows]
 
     def list_runs(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return compact run metadata for the history list."""
         with closing(self.connect()) as conn:
             rows = conn.execute(
                 """

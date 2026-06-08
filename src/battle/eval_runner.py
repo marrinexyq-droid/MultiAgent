@@ -1,3 +1,5 @@
+"""Batch evaluation runner for comparing agent policies across scenarios."""
+
 from __future__ import annotations
 
 import argparse
@@ -17,6 +19,8 @@ from .roster import default_scenario_config, default_team_config
 
 @dataclass(frozen=True)
 class EvaluationScenario:
+    """A deterministic scenario definition used by the evaluation harness."""
+
     name: str
     max_turns: int
     team_config: dict[str, Any]
@@ -38,6 +42,7 @@ def _scenario_payload(width: int, height: int, grid_type: str = "square", terrai
 
 
 def build_default_scenarios() -> list[EvaluationScenario]:
+    """Create representative scenarios that stress different team capabilities."""
     balanced = default_team_config()
 
     scout_pressure = default_team_config()
@@ -81,11 +86,14 @@ def _with_policy_api_key(policy: str):
 
 
 def run_single_evaluation(policy: str, scenario: EvaluationScenario, seed: int) -> dict[str, Any]:
+    """Run one policy/scenario pair and return normalized metrics."""
     original_api_key = config.api_key
     random_state = random.getstate()
     config.api_key = _with_policy_api_key(policy)
     random.seed(seed)
     try:
+        # Policy selection is modeled through the shared config so the normal
+        # runtime path is reused instead of maintaining a separate eval engine.
         manager = BattleSessionManager()
         session = manager.create_session(
             mode=f"eval:{policy}",
@@ -125,6 +133,7 @@ def run_single_evaluation(policy: str, scenario: EvaluationScenario, seed: int) 
 
 
 def _aggregate_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate raw run rows into dashboard-friendly policy metrics."""
     total = len(runs)
     red_wins = sum(1 for run in runs if run["winner"] == "red")
     blue_wins = sum(1 for run in runs if run["winner"] == "blue")
@@ -151,6 +160,7 @@ def run_evaluation(
     scenarios: list[EvaluationScenario] | None = None,
     seed: int = 42,
 ) -> dict[str, Any]:
+    """Run the full Cartesian product of policies, scenarios, and seeds."""
     policies = policies or ["rule_only", "hybrid"]
     scenarios = scenarios or build_default_scenarios()
     results: list[dict[str, Any]] = []
@@ -230,6 +240,7 @@ def render_markdown_report(report: dict[str, Any]) -> str:
 
 
 def write_reports(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
+    """Write both machine-readable JSON and resume-friendly Markdown reports."""
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "eval_latest.json"
     md_path = output_dir / "eval_latest.md"

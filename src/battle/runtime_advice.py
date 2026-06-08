@@ -1,3 +1,9 @@
+"""Runtime advice generation built from structured battle state.
+
+This module replaced the old Gradio UI helpers. It keeps the API runtime focused
+on simulation orchestration while this file owns memory updates and advice rules.
+"""
+
 from __future__ import annotations
 
 from .battle_types import Team
@@ -5,6 +11,7 @@ from .judge import BattleJudge
 
 
 def record_visible_enemy_contacts(agents, env, memory_red, memory_blue, turn: int) -> int:
+    """Write visible enemy contacts into the corresponding team's shared memory."""
     written = 0
     for agent_id, agent in agents.items():
         if not agent.state.alive:
@@ -77,6 +84,11 @@ def _render_advice_text(item: dict) -> str:
 
 
 def build_advice_items(env, memory_red, memory_blue) -> list[dict]:
+    """Build a small ranked set of actionable advice items for the current frame.
+
+    The rules intentionally stay deterministic so evaluation runs remain
+    reproducible even when LLM decision mode is enabled elsewhere.
+    """
     judge = BattleJudge()
     red_agents = _team_agents(env, Team.RED)
     blue_agents = _team_agents(env, Team.BLUE)
@@ -187,5 +199,7 @@ def build_advice_items(env, memory_red, memory_blue) -> list[dict]:
     return items[:3]
 
 
+# Backward-compatible aliases keep older tests and call sites readable while the
+# implementation lives under non-UI names.
 _build_advice_items = build_advice_items
 _record_visible_enemy_contacts = record_visible_enemy_contacts

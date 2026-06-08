@@ -273,6 +273,7 @@ export interface BattleFrame {
 }
 
 export interface BattleHistoryItem {
+  // Compact persisted run metadata used by the history page.
   battle_id: string;
   created_at: string;
   updated_at: string;

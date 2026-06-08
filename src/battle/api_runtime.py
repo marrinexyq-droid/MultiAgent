@@ -393,6 +393,7 @@ def capture_structured_frame(
     llm_decision_traces: list[dict[str, Any]] | None = None,
     llm_mode_enabled: bool | None = None,
 ) -> dict[str, Any]:
+    """Serialize one simulator state into the frontend replay frame contract."""
     red_view = _memory_view_for_team(Team.RED, env, memory_red)
     blue_view = _memory_view_for_team(Team.BLUE, env, memory_blue)
     visibility_red = env.compute_team_visibility(Team.RED) if hasattr(env, 'compute_team_visibility') else None
@@ -419,6 +420,7 @@ def capture_structured_frame(
 
 
 def _build_actions(agents, env, memory_red, memory_blue, turn: int):
+    """Collect one action per alive agent and capture optional LLM traces."""
     actions = []
     llm_decision_traces: list[dict[str, Any]] = []
     for agent_id, agent in agents.items():
@@ -546,6 +548,8 @@ def _bridge_structured_events_to_memory(session: "BattleSession", turn: int) -> 
 
 @dataclass
 class BattleSession:
+    """Mutable in-memory session for a live or computed battle run."""
+
     battle_id: str
     mode: str
     max_turns: int
@@ -578,6 +582,7 @@ class BattleSession:
             self.persist_run()
 
     def ensure_initial_frame(self):
+        """Create and persist the frame-zero snapshot exactly once."""
         if not self.frames:
             self.frames.append(
                 capture_structured_frame(
@@ -593,6 +598,7 @@ class BattleSession:
             self.persist_run()
 
     def step_once(self, turn: int) -> tuple[dict[str, Any], bool]:
+        """Advance the environment by one turn and persist the resulting frame."""
         actions, llm_decision_traces = _build_actions(self.agents, self.env, self.memory_red, self.memory_blue, turn)
         record_visible_enemy_contacts(self.agents, self.env, self.memory_red, self.memory_blue, turn)
         _, done = self.env.step(actions)
@@ -651,6 +657,7 @@ class BattleSession:
         }
 
     def persist_run(self) -> None:
+        """Persist run-level metadata; no-op in tests that pass storage=None."""
         if self.storage is None:
             return
         self.storage.upsert_run(
@@ -665,6 +672,7 @@ class BattleSession:
         )
 
     def persist_frame(self, turn_index: int, frame: dict[str, Any]) -> None:
+        """Persist a replay frame separately from run metadata."""
         if self.storage is None:
             return
         self.storage.upsert_frame(self.battle_id, turn_index, frame)
@@ -672,6 +680,8 @@ class BattleSession:
 
 @dataclass
 class StoredBattleSession:
+    """Read-only adapter that lets stored replays use the same API endpoints."""
+
     battle_id: str
     mode: str
     max_turns: int
@@ -718,11 +728,14 @@ class StoredBattleSession:
 
 
 class BattleSessionManager:
+    """Factory and lookup layer for active sessions and persisted replays."""
+
     def __init__(self, storage: BattleStorage | None = None):
         self.sessions: dict[str, BattleSession] = {}
         self.storage = storage if storage is not None else BattleStorage(config.battle_db_path)
 
     def create_session(self, mode: str, max_turns: int, team_config_payload: dict | None = None, scenario_config_payload: dict | None = None) -> BattleSession:
+        """Normalize user config, create runtime objects, and persist frame zero."""
         team_config = normalize_team_config(team_config_payload)
         scenario_config = normalize_scenario_config(scenario_config_payload)
         agents, red_states, blue_states = build_agents_from_team_config(team_config, scenario_config=scenario_config)
@@ -752,6 +765,7 @@ class BattleSessionManager:
         return session
 
     def get(self, battle_id: str) -> BattleSession | StoredBattleSession:
+        """Prefer active sessions, then fall back to SQLite-backed replays."""
         if battle_id in self.sessions:
             return self.sessions[battle_id]
         stored = self.load_stored_session(battle_id)
@@ -760,6 +774,7 @@ class BattleSessionManager:
         return stored
 
     def load_stored_session(self, battle_id: str) -> StoredBattleSession | None:
+        """Rehydrate a completed run as a read-only session."""
         run = self.storage.load_run(battle_id)
         if run is None:
             return None
@@ -785,10 +800,12 @@ manager = BattleSessionManager()
 
 
 def sse_event(name: str, data: dict[str, Any]) -> str:
+    """Format one server-sent event payload for the browser EventSource client."""
     return f"event: {name}\ndata: {json.dumps(to_jsonable(data), ensure_ascii=False)}\n\n"
 
 
 def stream_battle(session: BattleSession):
+    """Stream live frames incrementally instead of computing the full replay first."""
     if not session.started:
         session.start()
     session.ensure_initial_frame()

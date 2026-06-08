@@ -2,6 +2,8 @@ import type { BattleFrame, BattleHistoryItem, EvaluationReport, RolesResponse, S
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
+// Thin API wrapper: components consume typed functions instead of assembling
+// backend URLs directly, which keeps route changes localized to this file.
 export async function fetchRoles(): Promise<RolesResponse> {
   const response = await fetch(`${API_BASE}/api/roles`);
   if (!response.ok) throw new Error("failed to load roles");
@@ -56,6 +58,8 @@ export function openBattleStream(
     onError: (error: Event) => void;
   },
 ): EventSource {
+  // Live battles use SSE so the backend can push each frame as soon as a turn is
+  // resolved; stored replays are loaded through fetchBattleFrames instead.
   const source = new EventSource(`${API_BASE}/api/battles/${battleId}/stream`);
   source.addEventListener("frame", (event) => {
     const payload = JSON.parse((event as MessageEvent).data);
@@ -87,6 +91,8 @@ export async function fetchBattleSummary(battleId: string): Promise<unknown> {
 }
 
 export async function fetchBattleHistory(limit = 50): Promise<BattleHistoryItem[]> {
+  // The backend returns compact run metadata here; full frames are fetched only
+  // when the user opens a replay.
   const response = await fetch(`${API_BASE}/api/battles?limit=${encodeURIComponent(limit)}`);
   if (!response.ok) throw new Error("failed to load battle history");
   const payload = await response.json();
@@ -94,6 +100,7 @@ export async function fetchBattleHistory(limit = 50): Promise<BattleHistoryItem[
 }
 
 export async function fetchLatestEvaluation(): Promise<EvaluationReport> {
+  // Evaluation reports are precomputed artifacts, not generated on page load.
   const response = await fetch(`${API_BASE}/api/evaluations/latest`);
   if (!response.ok) throw new Error("failed to load latest evaluation");
   return response.json();
