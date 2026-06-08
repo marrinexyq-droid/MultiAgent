@@ -19,6 +19,7 @@ PHASE1_REPORT.md
 PHASE1_SUMMARY.md
 img/
 outputs/
+data/*.sqlite3
 demo/
 kimi_papers/
 docs/

@@ -9,6 +9,7 @@
         </div>
       </div>
       <nav class="nav-links">
+        <RouterLink to="/history">历史</RouterLink>
         <RouterLink to="/">概览</RouterLink>
         <RouterLink to="/evaluation">评测</RouterLink>
         <RouterLink to="/deployment">场景配置</RouterLink>

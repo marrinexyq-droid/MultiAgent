@@ -29,6 +29,7 @@ class BattleConfig:
     api_base_url: str = "https://api.siliconflow.cn/v1"
     model: str = "Qwen/Qwen2.5-7B-Instruct"
     log_dir: str = "outputs/confrontation_logs/"
+    battle_db_path: str = "data/battles.sqlite3"
 
     def __post_init__(self):
         project_env = load_project_env()
@@ -53,7 +54,13 @@ class BattleConfig:
             or project_env.get("SILICONFLOW_MODEL")
             or self.model
         )
+        self.battle_db_path = (
+            os.getenv("BATTLE_DB_PATH")
+            or project_env.get("BATTLE_DB_PATH")
+            or self.battle_db_path
+        )
         os.makedirs(self.log_dir, exist_ok=True)
+        os.makedirs(Path(self.battle_db_path).parent, exist_ok=True)
 
 
 config = BattleConfig()

@@ -21,7 +21,7 @@ from src.battle.llm_actions import parse_llm_action_response
 from src.battle.memory import SharedMemoryPool
 from src.battle.roster import ROLE_TEMPLATES, build_agents_from_team_config, default_scenario_config, default_team_config
 from src.battle.runner import create_agents, main
-from src.battle.battle_ui_v3 import _build_advice_items, _record_visible_enemy_contacts
+from src.battle.runtime_advice import _build_advice_items, _record_visible_enemy_contacts
 
 
 class BattleSystemTests(unittest.TestCase):
@@ -352,6 +352,87 @@ class BattleSystemTests(unittest.TestCase):
         self.assertIn("llm_decision_traces", payload["frames"][0])
         self.assertFalse(payload["frames"][0]["llm_mode_enabled"])
         self.assertEqual(payload["frames"][0]["llm_decision_traces"], [])
+
+    def test_battle_storage_persists_initial_frame_and_completed_summary(self):
+        from src.battle.api_runtime import BattleSessionManager
+        from src.battle.storage import BattleStorage
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage = BattleStorage(Path(tmpdir) / "battles.sqlite3")
+            local_manager = BattleSessionManager(storage=storage)
+            session = local_manager.create_session("replay", 3)
+            battle_id = session.battle_id
+
+            run = storage.load_run(battle_id)
+            self.assertIsNotNone(run)
+            self.assertEqual(run["frame_count"], 1)
+            self.assertEqual(len(storage.load_frames(battle_id)), 1)
+
+            session.run_all()
+            completed = storage.load_run(battle_id)
+            self.assertEqual(completed["status"], "done")
+            self.assertGreaterEqual(completed["frame_count"], 2)
+            self.assertIsNotNone(completed["summary"])
+            self.assertIn("result", completed["summary"])
+            self.assertIn("red_score", completed["summary"]["result"])
+            self.assertIn("blue_score", completed["summary"]["result"])
+
+    def test_battle_storage_restores_frames_after_memory_session_is_cleared(self):
+        from src.battle.api_runtime import BattleSessionManager
+        from src.battle.storage import BattleStorage
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage = BattleStorage(Path(tmpdir) / "battles.sqlite3")
+            local_manager = BattleSessionManager(storage=storage)
+            session = local_manager.create_session("replay", 2)
+            battle_id = session.battle_id
+            expected_frames = session.run_all()
+
+            local_manager.sessions.clear()
+            restored = local_manager.get(battle_id)
+
+            restored_frames = restored.run_all()
+            self.assertEqual(len(restored_frames), len(expected_frames))
+            self.assertEqual(restored_frames[0]["turn"], expected_frames[0]["turn"])
+            self.assertEqual(restored_frames[-1]["turn"], expected_frames[-1]["turn"])
+            self.assertEqual(restored.summary_payload()["battle_id"], battle_id)
+            self.assertEqual(restored.summary_payload()["status"], "done")
+
+    def test_api_battle_history_lists_persisted_results(self):
+        if self.client is None:
+            self.skipTest("fastapi not available in current python runtime")
+        from src.battle import api_server
+        from src.battle.api_runtime import BattleSessionManager
+        from src.battle.storage import BattleStorage
+
+        original_manager = api_server.manager
+        with tempfile.TemporaryDirectory() as tmpdir:
+            api_server.manager = BattleSessionManager(storage=BattleStorage(Path(tmpdir) / "battles.sqlite3"))
+            try:
+                create = self.client.post("/api/battles", json={"mode": "replay", "max_turns": 2})
+                self.assertEqual(create.status_code, 200)
+                battle_id = create.json()["battle_id"]
+                frames = self.client.get(f"/api/battles/{battle_id}/frames")
+                self.assertEqual(frames.status_code, 200)
+
+                api_server.manager.sessions.clear()
+                restored_frames = self.client.get(f"/api/battles/{battle_id}/frames")
+                restored_summary = self.client.get(f"/api/battles/{battle_id}/summary")
+                history = self.client.get("/api/battles")
+            finally:
+                api_server.manager = original_manager
+
+        self.assertEqual(restored_frames.status_code, 200)
+        self.assertTrue(restored_frames.json()["frames"])
+        self.assertEqual(restored_summary.status_code, 200)
+        self.assertEqual(restored_summary.json()["battle_id"], battle_id)
+        self.assertEqual(history.status_code, 200)
+        battles = history.json()["battles"]
+        self.assertEqual(battles[0]["battle_id"], battle_id)
+        self.assertEqual(battles[0]["status"], "done")
+        self.assertIn("winner", battles[0])
+        self.assertIn("red_score", battles[0])
+        self.assertIn("blue_score", battles[0])
 
     def test_api_pause_resume_routes_update_live_session(self):
         if self.client is None:

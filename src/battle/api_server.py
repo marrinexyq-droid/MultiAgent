@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -18,7 +18,6 @@ from .api_runtime import (
 )
 from .config import config
 from .terrain import TERRAIN_PRESETS
-from .fantasy_api import router as fantasy_router
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -37,7 +36,6 @@ class BattleStartRequest(BaseModel):
 
 
 app = FastAPI(title="Battle Console API", version="0.1.0")
-app.include_router(fantasy_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -87,6 +85,11 @@ def create_battle(payload: BattleCreateRequest):
     }
 
 
+@app.get("/api/battles")
+def list_battles(limit: int = Query(default=50, ge=1, le=200)):
+    return {"battles": manager.list_history(limit=limit)}
+
+
 @app.post("/api/battles/{battle_id}/start")
 def start_battle(battle_id: str, payload: BattleStartRequest):
     try:
@@ -125,6 +128,8 @@ def stream_battle_route(battle_id: str):
         session = manager.get(battle_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="battle not found") from exc
+    if not hasattr(session, "env"):
+        raise HTTPException(status_code=409, detail="stored replay cannot be streamed")
     return StreamingResponse(stream_battle(session), media_type="text/event-stream")
 
 

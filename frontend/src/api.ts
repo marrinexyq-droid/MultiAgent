@@ -1,4 +1,4 @@
-import type { BattleFrame, EvaluationReport, RolesResponse, ScenarioConfig, TeamConfigPayload } from "./types";
+import type { BattleFrame, BattleHistoryItem, EvaluationReport, RolesResponse, ScenarioConfig, TeamConfigPayload } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
@@ -84,6 +84,13 @@ export async function fetchBattleSummary(battleId: string): Promise<unknown> {
   const response = await fetch(`${API_BASE}/api/battles/${battleId}/summary`);
   if (!response.ok) throw new Error("failed to load summary");
   return response.json();
+}
+
+export async function fetchBattleHistory(limit = 50): Promise<BattleHistoryItem[]> {
+  const response = await fetch(`${API_BASE}/api/battles?limit=${encodeURIComponent(limit)}`);
+  if (!response.ok) throw new Error("failed to load battle history");
+  const payload = await response.json();
+  return payload.battles ?? [];
 }
 
 export async function fetchLatestEvaluation(): Promise<EvaluationReport> {

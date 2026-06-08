@@ -8,12 +8,13 @@ from enum import Enum
 from typing import Any
 
 from .battle_types import Message, Position, Role, Team, TerrainCell
-from .battle_ui_v3 import _build_advice_items, _record_visible_enemy_contacts
 from .config import config
 from .grid_rules import distance as grid_distance
 from .terrain import TERRAIN_PRESETS
 from .judge import BattleJudge
 from .memory import SharedMemoryPool
+from .runtime_advice import build_advice_items, record_visible_enemy_contacts
+from .storage import BattleStorage
 from .roster import (
     ROLE_LABELS,
     ROLE_TEMPLATES,
@@ -411,7 +412,7 @@ def capture_structured_frame(
             "red": _serialize_memory(red_view, env=env, team=Team.RED),
             "blue": _serialize_memory(blue_view, env=env, team=Team.BLUE),
         },
-        "advice_items": _build_advice_items(env, memory_red, memory_blue),
+        "advice_items": build_advice_items(env, memory_red, memory_blue),
         "llm_mode_enabled": bool(llm_mode_enabled) if llm_mode_enabled is not None else _llm_mode_enabled(),
         "llm_decision_traces": llm_decision_traces or [],
     }
@@ -554,6 +555,7 @@ class BattleSession:
     env: Any
     memory_red: SharedMemoryPool
     memory_blue: SharedMemoryPool
+    storage: BattleStorage | None = None
     status: str = "created"
     frames: list[dict[str, Any]] = field(default_factory=list)
     result: dict[str, Any] | None = None
@@ -568,10 +570,12 @@ class BattleSession:
     def pause(self) -> None:
         if self.status == "running":
             self.status = "paused"
+            self.persist_run()
 
     def resume(self) -> None:
         if self.status == "paused":
             self.status = "running"
+            self.persist_run()
 
     def ensure_initial_frame(self):
         if not self.frames:
@@ -585,10 +589,12 @@ class BattleSession:
                     llm_mode_enabled=_llm_mode_enabled(self.agents),
                 )
             )
+            self.persist_frame(0, self.frames[0])
+            self.persist_run()
 
     def step_once(self, turn: int) -> tuple[dict[str, Any], bool]:
         actions, llm_decision_traces = _build_actions(self.agents, self.env, self.memory_red, self.memory_blue, turn)
-        _record_visible_enemy_contacts(self.agents, self.env, self.memory_red, self.memory_blue, turn)
+        record_visible_enemy_contacts(self.agents, self.env, self.memory_red, self.memory_blue, turn)
         _, done = self.env.step(actions)
         _bridge_structured_events_to_memory(self, self.env.turn)
         self.memory_red.update_task_progress(self.env.agents, self.env.turn)
@@ -607,8 +613,11 @@ class BattleSession:
             llm_mode_enabled=_llm_mode_enabled(self.agents),
         )
         self.frames.append(frame)
+        self.persist_frame(len(self.frames) - 1, frame)
         if done:
             self.complete()
+        else:
+            self.persist_run()
         return frame, done
 
     def run_all(self) -> list[dict[str, Any]]:
@@ -628,6 +637,7 @@ class BattleSession:
         if self.result is None:
             self.result = BattleJudge().evaluate(self.env, self.memory_red, self.memory_blue)
         self.status = "done"
+        self.persist_run()
 
     def summary_payload(self) -> dict[str, Any]:
         return {
@@ -640,10 +650,77 @@ class BattleSession:
             "result": to_jsonable(self.result),
         }
 
+    def persist_run(self) -> None:
+        if self.storage is None:
+            return
+        self.storage.upsert_run(
+            battle_id=self.battle_id,
+            status=self.status,
+            mode=self.mode,
+            max_turns=self.max_turns,
+            frame_count=len(self.frames),
+            team_config=self.team_config_payload,
+            scenario_config=self.scenario_config_payload,
+            summary=self.summary_payload(),
+        )
+
+    def persist_frame(self, turn_index: int, frame: dict[str, Any]) -> None:
+        if self.storage is None:
+            return
+        self.storage.upsert_frame(self.battle_id, turn_index, frame)
+
+
+@dataclass
+class StoredBattleSession:
+    battle_id: str
+    mode: str
+    max_turns: int
+    scenario_config_payload: dict[str, Any]
+    frames: list[dict[str, Any]]
+    status: str = "done"
+    result: dict[str, Any] | None = None
+    summary: dict[str, Any] | None = None
+    started: bool = True
+
+    def start(self) -> None:
+        return
+
+    def pause(self) -> None:
+        return
+
+    def resume(self) -> None:
+        return
+
+    def ensure_initial_frame(self):
+        return
+
+    def step_once(self, turn: int) -> tuple[dict[str, Any], bool]:
+        raise RuntimeError("stored replay sessions cannot be advanced")
+
+    def run_all(self) -> list[dict[str, Any]]:
+        return self.frames
+
+    def complete(self) -> None:
+        return
+
+    def summary_payload(self) -> dict[str, Any]:
+        if self.summary:
+            return self.summary
+        return {
+            "battle_id": self.battle_id,
+            "status": self.status,
+            "mode": self.mode,
+            "max_turns": self.max_turns,
+            "scenario_config": self.scenario_config_payload,
+            "frame_count": len(self.frames),
+            "result": to_jsonable(self.result),
+        }
+
 
 class BattleSessionManager:
-    def __init__(self):
+    def __init__(self, storage: BattleStorage | None = None):
         self.sessions: dict[str, BattleSession] = {}
+        self.storage = storage if storage is not None else BattleStorage(config.battle_db_path)
 
     def create_session(self, mode: str, max_turns: int, team_config_payload: dict | None = None, scenario_config_payload: dict | None = None) -> BattleSession:
         team_config = normalize_team_config(team_config_payload)
@@ -668,13 +745,40 @@ class BattleSessionManager:
             env=env,
             memory_red=SharedMemoryPool(Team.RED, battle_stats=env.stats),
             memory_blue=SharedMemoryPool(Team.BLUE, battle_stats=env.stats),
+            storage=self.storage,
         )
         session.ensure_initial_frame()
         self.sessions[battle_id] = session
         return session
 
-    def get(self, battle_id: str) -> BattleSession:
-        return self.sessions[battle_id]
+    def get(self, battle_id: str) -> BattleSession | StoredBattleSession:
+        if battle_id in self.sessions:
+            return self.sessions[battle_id]
+        stored = self.load_stored_session(battle_id)
+        if stored is None:
+            raise KeyError(battle_id)
+        return stored
+
+    def load_stored_session(self, battle_id: str) -> StoredBattleSession | None:
+        run = self.storage.load_run(battle_id)
+        if run is None:
+            return None
+        frames = self.storage.load_frames(battle_id)
+        summary = run.get("summary")
+        result = summary.get("result") if isinstance(summary, dict) else None
+        return StoredBattleSession(
+            battle_id=battle_id,
+            mode=run["mode"],
+            max_turns=run["max_turns"],
+            scenario_config_payload=run.get("scenario_config") or {},
+            frames=frames,
+            status=run["status"],
+            result=result,
+            summary=summary,
+        )
+
+    def list_history(self, limit: int = 50) -> list[dict[str, Any]]:
+        return self.storage.list_runs(limit=limit)
 
 
 manager = BattleSessionManager()

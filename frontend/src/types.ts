@@ -272,6 +272,20 @@ export interface BattleFrame {
   }>;
 }
 
+export interface BattleHistoryItem {
+  battle_id: string;
+  created_at: string;
+  updated_at: string;
+  status: string;
+  mode: string;
+  max_turns: number;
+  frame_count: number;
+  winner: TeamKey | null;
+  red_score: number | null;
+  blue_score: number | null;
+  reason: string | null;
+}
+
 export interface EvaluationMetrics {
   runs: number;
   red_win_rate: number;
