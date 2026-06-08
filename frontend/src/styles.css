@@ -831,6 +831,18 @@ a { color: inherit; text-decoration: none; }
 }
 .info-column { grid-template-columns: 1fr; }
 .overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.history-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.history-card { align-items: flex-start; }
+.history-score-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.history-score-row .hud-team.red { color: var(--red); }
+.history-score-row .hud-team.blue { color: var(--blue); }
 .support-grid { grid-template-columns: minmax(0, 0.28fr) minmax(0, 0.72fr); margin-top: 8px; align-items: start; }
 .intel-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3852,76 +3864,6 @@ code {
 }
 
 /* ===============================
-   Hex Lab Page Layout
-   =============================== */
-.hex-lab-page {
-  --hex-bg: #0f172a;
-  --hex-card: #1e293b;
-  --hex-elevated: #334155;
-  --hex-accent: #00d4ff;
-  --hex-accent-glow: rgba(0,212,255,0.3);
-  --hex-success: #10b981;
-  --hex-warning: #f59e0b;
-  --hex-danger: #ef4444;
-  --hex-red: #ef4444;
-  --hex-blue: #3b82f6;
-  --hex-text: #e2e8f0;
-  --hex-text-secondary: #94a3b8;
-  --hex-text-muted: #64748b;
-  --hex-line: rgba(255,255,255,0.06);
-  --font-sans: "Roboto", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: "Space Mono", "Noto Sans SC", monospace;
-  --text-primary: var(--hex-text);
-  --text-secondary: var(--hex-text-secondary);
-  --text-muted: var(--hex-text-muted);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-  font-weight: 400;
-  min-height: calc(100vh - 82px);
-  padding: 22px;
-  background: radial-gradient(circle at 20% 8%, rgba(0,212,255,0.03), transparent 30%), var(--hex-bg);
-  color: var(--hex-text);
-}
-.hex-lab-topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
-  align-items: end;
-  margin: 0 auto 18px;
-  max-width: 1560px;
-}
-.hex-lab-topbar h1 {
-  margin: 4px 0 6px;
-  font-size: clamp(38px, 5vw, 72px);
-  line-height: 0.95;
-  letter-spacing: -0.07em;
-  color: #ffffff;
-}
-.hex-lab-topbar p { margin: 0; color: rgba(255,255,255,0.35); }
-.hex-lab-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: end; }
-.hex-lab-console {
-  max-width: 1560px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
-  gap: 18px;
-  align-items: stretch;
-  height: calc(100vh - 170px);
-  min-height: 0;
-}
-.hex-lab-main { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; min-width: 0; min-height: 0; }
-.hex-lab-side { display: grid; gap: 12px; align-content: start; min-width: 0; }
-.hex-side-scroll {
-  max-height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 4px;
-}
-.hex-side-scroll::-webkit-scrollbar { width: 4px; }
-.hex-side-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 999px; }
-
-/* ===============================
    Hex Map Card
    =============================== */
 .hex-map-card {
@@ -4780,53 +4722,6 @@ code {
 .hex-terrain-tooltip span { font-size: 10px; color: var(--text-secondary); }
 
 /* ===============================
-   Control Bar
-   =============================== */
-.hex-control-bar {
-  display: grid;
-  grid-template-columns: auto minmax(160px, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px;
-  border-radius: 22px;
-  border: 1px solid var(--line);
-  background: var(--hex-card);
-}
-.hex-control-buttons, .hex-speed-group { display: flex; gap: 6px; }
-.hex-control-bar button {
-  border: 1px solid var(--hex-line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--hex-text-secondary);
-  min-width: 36px;
-  height: 36px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-.hex-control-bar button:hover {
-  background: var(--hex-elevated);
-  color: var(--hex-text);
-  border-color: rgba(255,255,255,0.15);
-}
-.hex-control-bar button.active {
-  background: transparent;
-  color: var(--hex-accent);
-  border-color: var(--hex-accent);
-  box-shadow: 0 0 12px var(--hex-accent-glow);
-}
-.hex-control-bar .hex-play {
-  background: var(--hex-accent);
-  color: #fff;
-  border-color: var(--hex-accent);
-  box-shadow: 0 0 16px var(--hex-accent-glow);
-  font-weight: 700;
-}
-.hex-range { width: 100%; accent-color: var(--hex-accent); }
-
-/* ===============================
    Sidebar Cards
    =============================== */
 .hex-side-card {
@@ -5275,24 +5170,6 @@ code {
   .hex-effect-layer { display: none !important; }
 }
 @media (max-width: 980px) {
-  .hex-lab-page {
-    min-height: 100vh;
-    padding: 14px;
-  }
-  .hex-lab-topbar, .hex-lab-console, .hex-control-bar { grid-template-columns: 1fr; }
-  .hex-lab-topbar {
-    align-items: start;
-  }
-  .hex-lab-topbar h1 {
-    font-size: clamp(32px, 12vw, 48px);
-    line-height: 1;
-  }
-  .hex-lab-actions {
-    justify-content: flex-start;
-  }
-  .hex-lab-console {
-    height: auto;
-  }
   .hex-map-card {
     min-height: 0;
     border-radius: 22px;
@@ -5309,5 +5186,4 @@ code {
   .hex-map-head-left {
     flex-wrap: wrap;
   }
-  .hex-lab-actions, .hex-control-buttons, .hex-speed-group { justify-content: flex-start; }
 }

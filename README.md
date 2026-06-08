@@ -117,7 +117,7 @@ python -m src.battle.eval_runner --runs 20
 
 ### 实验模式
 
-`/fantasy` 和早期 square grid 页面保留为实验入口，不作为当前项目主线展示。当前主线聚焦于 Agent 策略评测、LLM 决策追踪和多智能体记忆分析。
+旧版 Gradio UI、研究 Agent demo、魔幻战场和独立 Hex Lab 已移除，当前主线聚焦于 Agent 策略评测、LLM 决策追踪和多智能体记忆分析。
 
 ## 项目结构
 
